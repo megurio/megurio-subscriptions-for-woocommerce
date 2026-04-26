@@ -1,0 +1,54 @@
+.megurio-subscription-notice {
+	margin-top: 0.75em;
+	padding: 0.75em 0.9em;
+	border: 1px solid #d9e6d2;
+	border-radius: 8px;
+	background: #f6fbf2;
+	font-size: 0.95em;
+	line-height: 1.55;
+}
+
+.megurio-subscription-notice strong {
+	display: inline-block;
+	margin-bottom: 0.2em;
+	color: #355b2f;
+}
+
+.megurio-subscription-notice-archive {
+	font-size: 0.9em;
+}
+
+.megurio-subscription-notice-single {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	margin: 0.4em 0 0.6em;
+	line-height: 1.4;
+}
+
+.megurio-subscription-badge {
+	display: inline-block;
+	padding: 0.1em 0.5em;
+	background: #f0f8eb;
+	border: 1px solid #c2ddb8;
+	border-radius: 4px;
+	font-size: 0.8em;
+	font-weight: 600;
+	color: #355b2f;
+}
+
+.megurio-subscription-interval {
+	font-size: 0.85em;
+	color: #666;
+}
+
+.megurio-price-interval {
+	font-size: 0.7em;
+	font-weight: normal;
+	color: #888;
+	margin-left: 0.15em;
+}
+
+.megurio-account-heading {
+	margin-top: 24px;
+}

@@ -1,12 +1,12 @@
 === Megurio 定期購入(サブスク) For WooCommerce（日本向け） ===
-Contributors: megurio
+Contributors: wapai222
 Tags: subscriptions, recurring payments, woocommerce subscriptions, manual renewal, bacs
 Requires at least: 6.5
 Tested up to: 6.9
 Requires PHP: 8.0
 WC requires at least: 8.2
 WC tested up to: 10.6.2
-Stable tag: 0.2.1
+Stable tag: 0.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -102,6 +102,12 @@ The plugin uses WooCommerce order CRUD and is written to work with HPOS-aware or
 
 == Changelog ==
 
+= 0.2.2 =
+
+* CSS/JS の直接出力を廃止し、専用ファイルを wp_enqueue_style() / wp_enqueue_script() で読み込むように修正しました。
+* 以前のテスト用または未接頭辞の宣言、内部フック、保存データキーを megurio 接頭辞に統一しました。
+* プラグインヘッダーに Requires Plugins: woocommerce を追加しました。
+
 = 0.2.1 =
 
 * Added recurring product flow
@@ -109,4 +115,3 @@ The plugin uses WooCommerce order CRUD and is written to work with HPOS-aware or
 * Added My Account recurring pages
 * Added recurring notification emails
 * Restricted recurring checkout to bank transfer
-

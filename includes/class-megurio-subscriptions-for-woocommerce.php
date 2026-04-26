@@ -4,11 +4,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
+if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	/**
 	 * 定期購入の最小フローをまとめたメインクラスです。
 	 */
-	class Test_Subscription_For_Woocommerce {
+	class Megurio_Subscriptions_For_Woocommerce {
 	/**
 	 * プラグイン内部バージョンです。
 	 */
@@ -17,17 +17,17 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	/**
 	 * 定期購入レコードの注文タイプです。
 	 */
-	const SUBSCRIPTION_TYPE = 'tsfw_subscription';
+	const SUBSCRIPTION_TYPE = 'megurio_subscription';
 
 	/**
 	 * 更新注文を作る定期処理のフック名です。
 	 */
-	const ACTION_CREATE_RENEWALS = 'tsfw_create_renewal_orders';
+	const ACTION_CREATE_RENEWALS = 'megurio_create_renewal_orders';
 
 	/**
 	 * 期限切れ判定の定期処理のフック名です。
 	 */
-	const ACTION_EXPIRE_SUBSCRIPTIONS = 'tsfw_expire_subscriptions';
+	const ACTION_EXPIRE_SUBSCRIPTIONS = 'megurio_expire_subscriptions';
 
 	/**
 	 * 初期化します。
@@ -43,7 +43,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		add_filter( 'product_type_options', array( $this, 'add_product_type_option' ) );
 		add_action( 'woocommerce_product_options_general_product_data', array( $this, 'render_product_fields' ) );
 		add_action( 'woocommerce_process_product_meta', array( $this, 'save_product_fields' ) );
-		add_action( 'admin_footer', array( $this, 'render_admin_script' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
 		add_filter( 'manage_edit-product_columns', array( $this, 'add_product_list_column' ) );
 		add_action( 'manage_product_posts_custom_column', array( $this, 'render_product_list_column' ), 10, 2 );
 		add_filter( 'manage_edit-shop_order_columns', array( $this, 'add_order_list_column' ) );
@@ -52,16 +52,16 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		add_action( 'woocommerce_shop_order_list_table_custom_column', array( $this, 'render_order_list_column' ), 10, 2 );
 		add_action( 'admin_menu', array( $this, 'register_admin_menu' ) );
 		add_action( 'admin_init', array( $this, 'handle_admin_actions' ) );
-		add_action( 'admin_head', array( $this, 'render_admin_list_styles' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
 		add_action( 'template_redirect', array( $this, 'handle_front_actions' ) );
 		add_filter( 'woocommerce_account_menu_items', array( $this, 'add_my_account_menu_item' ) );
-		add_action( 'woocommerce_account_tsfw-subscriptions_endpoint', array( $this, 'render_my_account_page' ) );
+		add_action( 'woocommerce_account_megurio-subscriptions_endpoint', array( $this, 'render_my_account_page' ) );
 		add_action( 'woocommerce_after_shop_loop_item_title', array( $this, 'render_archive_subscription_notice' ), 15 );
 		add_action( 'woocommerce_single_product_summary', array( $this, 'render_single_subscription_notice' ), 11 );
 		add_filter( 'woocommerce_get_price_html', array( $this, 'append_price_interval_suffix' ), 10, 2 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'add_cart_subscription_item_data' ), 10, 2 );
 		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'limit_subscription_payment_gateways' ) );
-		add_action( 'wp_head', array( $this, 'render_front_styles' ) );
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_front_assets' ) );
 
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'create_subscriptions_from_order' ), 20, 3 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'create_subscriptions_from_order' ), 20, 1 );
@@ -79,14 +79,14 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	public function maybe_refresh_rewrite_rules() {
-		$saved_version = get_option( 'tsfw_plugin_version', '' );
+		$saved_version = get_option( 'megurio_plugin_version', '' );
 
 		if ( self::PLUGIN_VERSION === $saved_version ) {
 			return;
 		}
 
 		flush_rewrite_rules( false );
-		update_option( 'tsfw_plugin_version', self::PLUGIN_VERSION );
+		update_option( 'megurio_plugin_version', self::PLUGIN_VERSION );
 	}
 
 	/**
@@ -95,7 +95,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	public function register_account_endpoints() {
-		add_rewrite_endpoint( 'tsfw-subscriptions', EP_ROOT | EP_PAGES );
+		add_rewrite_endpoint( 'megurio-subscriptions', EP_ROOT | EP_PAGES );
 	}
 
 	/**
@@ -105,7 +105,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return array
 	 */
 	public function register_account_query_vars( $vars ) {
-		$vars[] = 'tsfw-subscriptions';
+		$vars[] = 'megurio-subscriptions';
 
 		return $vars;
 	}
@@ -121,7 +121,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			'定期購入一覧',
 			'定期購入一覧',
 			'manage_woocommerce',
-			'tsfw-subscriptions',
+			'megurio-subscriptions',
 			array( $this, 'render_admin_page' )
 		);
 	}
@@ -139,12 +139,12 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			$new_items[ $key ] = $label;
 
 			if ( 'orders' === $key ) {
-				$new_items['tsfw-subscriptions'] = '定期購入一覧';
+				$new_items['megurio-subscriptions'] = '定期購入一覧';
 			}
 		}
 
-		if ( ! isset( $new_items['tsfw-subscriptions'] ) ) {
-			$new_items['tsfw-subscriptions'] = '定期購入一覧';
+		if ( ! isset( $new_items['megurio-subscriptions'] ) ) {
+			$new_items['megurio-subscriptions'] = '定期購入一覧';
 		}
 
 		return $new_items;
@@ -165,15 +165,15 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			$page = sanitize_text_field( wp_unslash( $_REQUEST['page'] ) );
 		}
 
-		if ( 'tsfw-subscriptions' !== $page ) {
+		if ( 'megurio-subscriptions' !== $page ) {
 			return;
 		}
 
-		if ( 'POST' === $this->get_request_method() && ! empty( $_POST['tsfw_action'] ) ) {
-			$action = sanitize_text_field( wp_unslash( $_POST['tsfw_action'] ) );
+		if ( 'POST' === $this->get_request_method() && ! empty( $_POST['megurio_action'] ) ) {
+			$action = sanitize_text_field( wp_unslash( $_POST['megurio_action'] ) );
 
 			if ( 'change_status' === $action ) {
-				check_admin_referer( 'tsfw_change_subscription_status' );
+				check_admin_referer( 'megurio_change_subscription_status' );
 
 				$subscription_id = isset( $_POST['subscription_id'] ) ? absint( wp_unslash( $_POST['subscription_id'] ) ) : 0;
 				$target_status   = isset( $_POST['target_status'] ) ? sanitize_text_field( wp_unslash( $_POST['target_status'] ) ) : '';
@@ -181,10 +181,10 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 				if ( $subscription_id && $this->manually_update_subscription_status( $subscription_id, $target_status ) ) {
 					$redirect_url = add_query_arg(
 						array(
-							'page'            => 'tsfw-subscriptions',
+							'page'            => 'megurio-subscriptions',
 							'subscription_id' => $subscription_id,
-							'tsfw_notice'     => rawurlencode( '定期購入状態を更新しました。' ),
-							'tsfw_count'      => 1,
+							'megurio_notice'     => rawurlencode( '定期購入状態を更新しました。' ),
+							'megurio_count'      => 1,
 						),
 						admin_url( 'admin.php' )
 					);
@@ -195,13 +195,13 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			}
 		}
 
-		if ( empty( $_GET['tsfw_action'] ) ) {
+		if ( empty( $_GET['megurio_action'] ) ) {
 			return;
 		}
 
-		check_admin_referer( 'tsfw_admin_action' );
+		check_admin_referer( 'megurio_admin_action' );
 
-		$action  = sanitize_text_field( wp_unslash( $_GET['tsfw_action'] ) );
+		$action  = sanitize_text_field( wp_unslash( $_GET['megurio_action'] ) );
 		$count   = 0;
 		$message = '';
 
@@ -217,9 +217,9 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 		$redirect_url = add_query_arg(
 			array(
-				'page'         => 'tsfw-subscriptions',
-				'tsfw_notice'  => rawurlencode( $message ),
-				'tsfw_count'   => $count,
+				'page'         => 'megurio-subscriptions',
+				'megurio_notice'  => rawurlencode( $message ),
+				'megurio_count'   => $count,
 			),
 			admin_url( 'admin.php' )
 		);
@@ -242,7 +242,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return;
 		}
 
-		$action = isset( $_POST['tsfw_front_action'] ) ? sanitize_text_field( wp_unslash( $_POST['tsfw_front_action'] ) ) : '';
+		$action = isset( $_POST['megurio_front_action'] ) ? sanitize_text_field( wp_unslash( $_POST['megurio_front_action'] ) ) : '';
 		if ( 'cancel_subscription' !== $action ) {
 			return;
 		}
@@ -252,10 +252,10 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			array(
 				'subscription_id' => $subscription_id,
 			),
-			wc_get_account_endpoint_url( 'tsfw-subscriptions' )
+			wc_get_account_endpoint_url( 'megurio-subscriptions' )
 		);
 
-		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ?? '' ) ), 'tsfw_front_cancel_subscription' ) ) {
+		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ?? '' ) ), 'megurio_front_cancel_subscription' ) ) {
 			wc_add_notice( '不正なリクエストです。時間をおいて再度お試しください。', 'error' );
 			wp_safe_redirect( $redirect_url );
 			exit;
@@ -263,11 +263,11 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 		if ( ! $subscription_id || ! $this->user_owns_subscription( $subscription_id, get_current_user_id() ) ) {
 			wc_add_notice( '対象の定期購入が見つかりませんでした。', 'error' );
-			wp_safe_redirect( wc_get_account_endpoint_url( 'tsfw-subscriptions' ) );
+			wp_safe_redirect( wc_get_account_endpoint_url( 'megurio-subscriptions' ) );
 			exit;
 		}
 
-		$status = (string) $this->get_object_meta( $subscription_id, '_tsfw_subscription_status' );
+		$status = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
 		if ( ! in_array( $status, array( 'pending', 'active', 'on-hold' ), true ) ) {
 			wc_add_notice( 'この定期購入は現在キャンセルできません。', 'error' );
 			wp_safe_redirect( $redirect_url );
@@ -277,8 +277,8 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		$this->set_subscription_meta(
 			$subscription_id,
 			array(
-				'_tsfw_subscription_status' => 'cancelled',
-				'_tsfw_next_payment'        => 0,
+				'_megurio_subscription_status' => 'cancelled',
+				'_megurio_next_payment'        => 0,
 			)
 		);
 
@@ -306,12 +306,12 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			$new_columns[ $key ] = $label;
 
 			if ( 'sku' === $key ) {
-				$new_columns['tsfw_subscription_product'] = '定期購入';
+				$new_columns['megurio_subscription_product'] = '定期購入';
 			}
 		}
 
-		if ( ! isset( $new_columns['tsfw_subscription_product'] ) ) {
-			$new_columns['tsfw_subscription_product'] = '定期購入';
+		if ( ! isset( $new_columns['megurio_subscription_product'] ) ) {
+			$new_columns['megurio_subscription_product'] = '定期購入';
 		}
 
 		return $new_columns;
@@ -325,14 +325,14 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	public function render_product_list_column( $column, $post_id ) {
-		if ( 'tsfw_subscription_product' !== $column ) {
+		if ( 'megurio_subscription_product' !== $column ) {
 			return;
 		}
 
 		if ( $this->is_subscription_product( $post_id ) ) {
 			echo '<mark class="order-status status-processing"><span>定期購入商品</span></mark>';
 		} else {
-			echo '<span style="color:#8c8f94;">-</span>';
+			echo '<span class="megurio-muted">-</span>';
 		}
 	}
 
@@ -349,12 +349,12 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			$new_columns[ $key ] = $label;
 
 			if ( 'order_total' === $key ) {
-				$new_columns['tsfw_renewal_order'] = '定期購入';
+				$new_columns['megurio_renewal_order'] = '定期購入';
 			}
 		}
 
-		if ( ! isset( $new_columns['tsfw_renewal_order'] ) ) {
-			$new_columns['tsfw_renewal_order'] = '定期購入';
+		if ( ! isset( $new_columns['megurio_renewal_order'] ) ) {
+			$new_columns['megurio_renewal_order'] = '定期購入';
 		}
 
 		return $new_columns;
@@ -368,32 +368,32 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	public function render_order_list_column( $column, $order_id ) {
-		if ( 'tsfw_renewal_order' !== $column ) {
+		if ( 'megurio_renewal_order' !== $column ) {
 			return;
 		}
 
 		$order = is_numeric( $order_id ) ? wc_get_order( $order_id ) : $order_id;
 		if ( ! $order instanceof WC_Order ) {
-			echo '<span style="color:#8c8f94;">-</span>';
+			echo '<span class="megurio-muted">-</span>';
 			return;
 		}
 
-		if ( 'yes' === $order->get_meta( '_tsfw_is_renewal_order', true ) ) {
-			$subscription_id = absint( $order->get_meta( '_tsfw_subscription_id', true ) );
+		if ( 'yes' === $order->get_meta( '_megurio_is_renewal_order', true ) ) {
+			$subscription_id = absint( $order->get_meta( '_megurio_subscription_id', true ) );
 
 			echo '<mark class="order-status status-on-hold"><span>更新注文</span></mark>';
 			if ( $subscription_id ) {
-				echo '<div style="margin-top:4px;color:#50575e;">#' . esc_html( $subscription_id ) . '</div>';
+				echo '<div class="megurio-order-reference">#' . esc_html( $subscription_id ) . '</div>';
 			}
 			return;
 		}
 
-		if ( 'yes' === $order->get_meta( '_tsfw_has_subscription', true ) ) {
+		if ( 'yes' === $order->get_meta( '_megurio_has_subscription', true ) ) {
 			echo '<mark class="order-status status-processing"><span>初回定期購入注文</span></mark>';
 			return;
 		}
 
-		echo '<span style="color:#8c8f94;">-</span>';
+		echo '<span class="megurio-muted">-</span>';
 	}
 
 	/**
@@ -401,126 +401,28 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 *
 	 * @return void
 	 */
-	public function render_admin_list_styles() {
+	public function enqueue_admin_styles() {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( ! $screen ) {
 			return;
 		}
 
+		$screen_post_type  = isset( $screen->post_type ) ? $screen->post_type : '';
 		$is_product_screen = 'edit-product' === $screen->id;
+		$is_product_editor = 'product' === $screen_post_type;
 		$is_order_screen   = in_array( $screen->id, array( 'edit-shop_order', 'woocommerce_page_wc-orders' ), true );
-		$is_tsfw_screen    = 'woocommerce_page_tsfw-subscriptions' === $screen->id;
+		$is_megurio_screen    = 'woocommerce_page_megurio-subscriptions' === $screen->id;
 
-		if ( ! $is_product_screen && ! $is_order_screen && ! $is_tsfw_screen ) {
+		if ( ! $is_product_screen && ! $is_product_editor && ! $is_order_screen && ! $is_megurio_screen ) {
 			return;
 		}
-		?>
-		<style>
-			.column-tsfw_subscription_product,
-			.column-tsfw_renewal_order {
-				width: 110px;
-				white-space: nowrap;
-			}
 
-			.column-tsfw_subscription_product mark,
-			.column-tsfw_renewal_order mark {
-				white-space: nowrap;
-			}
-
-			.tsfw-admin-grid {
-				display: grid;
-				grid-template-columns: repeat(4, minmax(160px, 1fr));
-				gap: 12px;
-				margin: 16px 0 20px;
-			}
-
-			.tsfw-admin-card {
-				background: #fff;
-				border: 1px solid #dcdcde;
-				border-radius: 6px;
-				padding: 14px 16px;
-			}
-
-			.tsfw-admin-card strong {
-				display: block;
-				font-size: 24px;
-				line-height: 1.2;
-				margin-top: 6px;
-			}
-
-			.tsfw-admin-table {
-				width: 100%;
-				border-collapse: collapse;
-				background: #fff;
-				border: 1px solid #dcdcde;
-			}
-
-			.tsfw-admin-table th,
-			.tsfw-admin-table td {
-				padding: 10px 12px;
-				border-bottom: 1px solid #f0f0f1;
-				text-align: left;
-				vertical-align: top;
-			}
-
-			.tsfw-admin-table th {
-				background: #f6f7f7;
-			}
-
-			.tsfw-admin-detail {
-				margin-top: 20px;
-				background: #fff;
-				border: 1px solid #dcdcde;
-				border-radius: 6px;
-				padding: 16px;
-			}
-
-			.tsfw-note-list {
-				margin: 12px 0 0;
-			}
-
-			.tsfw-note-list li {
-				padding: 10px 0;
-				border-bottom: 1px solid #f0f0f1;
-			}
-
-			.tsfw-admin-meta {
-				display: grid;
-				grid-template-columns: repeat(2, minmax(220px, 1fr));
-				gap: 10px 18px;
-				margin: 14px 0 18px;
-			}
-
-			.tsfw-admin-meta div {
-				padding: 10px 12px;
-				background: #f6f7f7;
-				border-radius: 6px;
-			}
-
-			.tsfw-admin-meta strong {
-				display: block;
-				margin-bottom: 4px;
-			}
-
-			.tsfw-admin-subtable {
-				width: 100%;
-				border-collapse: collapse;
-				margin-top: 14px;
-			}
-
-			.tsfw-admin-subtable th,
-			.tsfw-admin-subtable td {
-				padding: 10px 12px;
-				border-bottom: 1px solid #f0f0f1;
-				text-align: left;
-				vertical-align: top;
-			}
-
-			.tsfw-admin-subtable th {
-				background: #f6f7f7;
-			}
-		</style>
-		<?php
+		wp_enqueue_style(
+			'megurio-admin',
+			plugins_url( 'assets/css/admin.css', dirname( __DIR__ ) . '/megurio-subscriptions-for-woocommerce.php' ),
+			array(),
+			self::PLUGIN_VERSION
+		);
 	}
 
 	/**
@@ -537,27 +439,27 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		$selected_id      = $this->get_query_int( 'subscription_id' );
 		$selected_order   = $selected_id ? wc_get_order( $selected_id ) : false;
 		$counts           = $this->get_subscription_status_counts( $subscription_ids );
-		$notice           = $this->get_query_text( 'tsfw_notice' );
-		$notice_count     = $this->get_query_int( 'tsfw_count' );
+		$notice           = $this->get_query_text( 'megurio_notice' );
+		$notice_count     = $this->get_query_int( 'megurio_count' );
 		$renewal_url      = wp_nonce_url(
 			add_query_arg(
 				array(
-					'page'        => 'tsfw-subscriptions',
-					'tsfw_action' => 'run_renewal',
+					'page'        => 'megurio-subscriptions',
+					'megurio_action' => 'run_renewal',
 				),
 				admin_url( 'admin.php' )
 			),
-			'tsfw_admin_action'
+			'megurio_admin_action'
 		);
 		$expire_url       = wp_nonce_url(
 			add_query_arg(
 				array(
-					'page'        => 'tsfw-subscriptions',
-					'tsfw_action' => 'run_expire',
+					'page'        => 'megurio-subscriptions',
+					'megurio_action' => 'run_expire',
 				),
 				admin_url( 'admin.php' )
 			),
-			'tsfw_admin_action'
+			'megurio_admin_action'
 		);
 		?>
 		<div class="wrap">
@@ -574,26 +476,26 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 				</div>
 			<?php endif; ?>
 
-			<div class="tsfw-admin-grid">
-				<div class="tsfw-admin-card">
+			<div class="megurio-admin-grid">
+				<div class="megurio-admin-card">
 					<div>全定期購入件数</div>
 					<strong><?php echo esc_html( count( $subscription_ids ) ); ?></strong>
 				</div>
-				<div class="tsfw-admin-card">
+				<div class="megurio-admin-card">
 					<div>有効</div>
 					<strong><?php echo esc_html( $counts['active'] ); ?></strong>
 				</div>
-				<div class="tsfw-admin-card">
+				<div class="megurio-admin-card">
 					<div>一時停止</div>
 					<strong><?php echo esc_html( $counts['on-hold'] ); ?></strong>
 				</div>
-				<div class="tsfw-admin-card">
+				<div class="megurio-admin-card">
 					<div>期限切れ</div>
 					<strong><?php echo esc_html( $counts['expired'] ); ?></strong>
 				</div>
 			</div>
 
-			<table class="tsfw-admin-table">
+			<table class="megurio-admin-table">
 				<thead>
 					<tr>
 						<th>定期購入 ID</th>
@@ -614,16 +516,16 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 					<?php else : ?>
 						<?php foreach ( $subscription_ids as $subscription_id ) : ?>
 							<?php
-							$status            = (string) $this->get_object_meta( $subscription_id, '_tsfw_subscription_status' );
-							$product_id        = absint( $this->get_object_meta( $subscription_id, '_tsfw_product_id' ) );
-							$parent_order_id   = absint( $this->get_object_meta( $subscription_id, '_tsfw_parent_order_id' ) );
-							$next_payment      = (int) $this->get_object_meta( $subscription_id, '_tsfw_next_payment' );
-							$end_date          = (int) $this->get_object_meta( $subscription_id, '_tsfw_end_date' );
-							$last_renewal_id   = absint( $this->get_object_meta( $subscription_id, '_tsfw_last_renewal_order' ) );
+							$status            = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
+							$product_id        = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
+							$parent_order_id   = absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) );
+							$next_payment      = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
+							$end_date          = (int) $this->get_object_meta( $subscription_id, '_megurio_end_date' );
+							$last_renewal_id   = absint( $this->get_object_meta( $subscription_id, '_megurio_last_renewal_order' ) );
 							$product_title     = $product_id ? get_the_title( $product_id ) : '-';
 							$detail_page_url   = add_query_arg(
 								array(
-									'page'            => 'tsfw-subscriptions',
+									'page'            => 'megurio-subscriptions',
 									'subscription_id' => $subscription_id,
 								),
 								admin_url( 'admin.php' )
@@ -664,16 +566,16 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 			<?php if ( $selected_order instanceof WC_Order ) : ?>
 				<?php
-				$selected_status   = (string) $this->get_object_meta( $selected_id, '_tsfw_subscription_status' );
-				$selected_product  = absint( $this->get_object_meta( $selected_id, '_tsfw_product_id' ) );
-				$selected_parent   = absint( $this->get_object_meta( $selected_id, '_tsfw_parent_order_id' ) );
-				$selected_customer = absint( $this->get_object_meta( $selected_id, '_tsfw_customer_id' ) );
-				$selected_start    = (int) $this->get_object_meta( $selected_id, '_tsfw_schedule_start' );
-				$selected_next     = (int) $this->get_object_meta( $selected_id, '_tsfw_next_payment' );
-				$selected_end      = (int) $this->get_object_meta( $selected_id, '_tsfw_end_date' );
-				$interval_count    = max( 1, absint( $this->get_object_meta( $selected_id, '_tsfw_interval_count' ) ) );
-				$interval_unit     = (string) $this->get_object_meta( $selected_id, '_tsfw_interval_unit' );
-				$renewal_ids       = $this->get_object_meta( $selected_id, '_tsfw_renewal_order_ids' );
+				$selected_status   = (string) $this->get_object_meta( $selected_id, '_megurio_subscription_status' );
+				$selected_product  = absint( $this->get_object_meta( $selected_id, '_megurio_product_id' ) );
+				$selected_parent   = absint( $this->get_object_meta( $selected_id, '_megurio_parent_order_id' ) );
+				$selected_customer = absint( $this->get_object_meta( $selected_id, '_megurio_customer_id' ) );
+				$selected_start    = (int) $this->get_object_meta( $selected_id, '_megurio_schedule_start' );
+				$selected_next     = (int) $this->get_object_meta( $selected_id, '_megurio_next_payment' );
+				$selected_end      = (int) $this->get_object_meta( $selected_id, '_megurio_end_date' );
+				$interval_count    = max( 1, absint( $this->get_object_meta( $selected_id, '_megurio_interval_count' ) ) );
+				$interval_unit     = (string) $this->get_object_meta( $selected_id, '_megurio_interval_unit' );
+				$renewal_ids       = $this->get_object_meta( $selected_id, '_megurio_renewal_order_ids' );
 				$renewal_ids       = is_array( $renewal_ids ) ? $renewal_ids : array();
 				$order_notes       = wc_get_order_notes(
 					array(
@@ -683,11 +585,11 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 					)
 				);
 				?>
-				<div class="tsfw-admin-detail">
+				<div class="megurio-admin-detail">
 					<h2>定期購入 #<?php echo esc_html( $selected_id ); ?> の詳細</h2>
 					<p>現在の状態: <?php echo wp_kses_post( $this->render_status_badge( $selected_status ) ); ?></p>
 
-					<div class="tsfw-admin-meta">
+					<div class="megurio-admin-meta">
 						<div>
 							<strong>商品</strong>
 							<?php if ( $selected_product ) : ?>
@@ -732,12 +634,12 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 					<h3>管理操作</h3>
 					<form method="post" action="">
-						<?php wp_nonce_field( 'tsfw_change_subscription_status' ); ?>
-						<input type="hidden" name="page" value="tsfw-subscriptions" />
-						<input type="hidden" name="tsfw_action" value="change_status" />
+						<?php wp_nonce_field( 'megurio_change_subscription_status' ); ?>
+						<input type="hidden" name="page" value="megurio-subscriptions" />
+						<input type="hidden" name="megurio_action" value="change_status" />
 						<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $selected_id ); ?>" />
-						<label for="tsfw-target-status"><strong>状態を手動変更</strong></label>
-						<select id="tsfw-target-status" name="target_status" style="margin:0 8px;">
+						<label for="megurio-target-status"><strong>状態を手動変更</strong></label>
+						<select id="megurio-target-status" class="megurio-target-status" name="target_status">
 							<option value="pending" <?php selected( $selected_status, 'pending' ); ?>>保留</option>
 							<option value="active" <?php selected( $selected_status, 'active' ); ?>>有効</option>
 							<option value="on-hold" <?php selected( $selected_status, 'on-hold' ); ?>>一時停止</option>
@@ -751,7 +653,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 					<?php if ( empty( $renewal_ids ) ) : ?>
 						<p>まだ自動作成された更新注文はありません。</p>
 					<?php else : ?>
-						<table class="tsfw-admin-subtable">
+						<table class="megurio-admin-subtable">
 							<thead>
 								<tr>
 									<th>注文 ID</th>
@@ -781,7 +683,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 					<?php endif; ?>
 
 					<h3>状態遷移メモ</h3>
-					<ul class="tsfw-note-list">
+					<ul class="megurio-note-list">
 						<?php if ( empty( $order_notes ) ) : ?>
 							<li>まだメモはありません。</li>
 						<?php else : ?>
@@ -843,15 +745,15 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			<tbody>
 				<?php foreach ( $subscription_ids as $subscription_id ) : ?>
 					<?php
-					$status          = (string) $this->get_object_meta( $subscription_id, '_tsfw_subscription_status' );
-					$product_id      = absint( $this->get_object_meta( $subscription_id, '_tsfw_product_id' ) );
-					$next_payment    = (int) $this->get_object_meta( $subscription_id, '_tsfw_next_payment' );
-					$end_date        = (int) $this->get_object_meta( $subscription_id, '_tsfw_end_date' );
+					$status          = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
+					$product_id      = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
+					$next_payment    = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
+					$end_date        = (int) $this->get_object_meta( $subscription_id, '_megurio_end_date' );
 					$detail_url      = add_query_arg(
 						array(
 							'subscription_id' => $subscription_id,
 						),
-						wc_get_account_endpoint_url( 'tsfw-subscriptions' )
+						wc_get_account_endpoint_url( 'megurio-subscriptions' )
 					);
 					?>
 					<tr>
@@ -875,15 +777,15 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	protected function render_my_account_subscription_detail( $subscription_id ) {
-		$status          = (string) $this->get_object_meta( $subscription_id, '_tsfw_subscription_status' );
-		$product_id      = absint( $this->get_object_meta( $subscription_id, '_tsfw_product_id' ) );
-		$parent_order_id = absint( $this->get_object_meta( $subscription_id, '_tsfw_parent_order_id' ) );
-		$next_payment    = (int) $this->get_object_meta( $subscription_id, '_tsfw_next_payment' );
-		$end_date        = (int) $this->get_object_meta( $subscription_id, '_tsfw_end_date' );
-		$start_date      = (int) $this->get_object_meta( $subscription_id, '_tsfw_schedule_start' );
-		$renewal_ids     = $this->get_object_meta( $subscription_id, '_tsfw_renewal_order_ids' );
+		$status          = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
+		$product_id      = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
+		$parent_order_id = absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) );
+		$next_payment    = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
+		$end_date        = (int) $this->get_object_meta( $subscription_id, '_megurio_end_date' );
+		$start_date      = (int) $this->get_object_meta( $subscription_id, '_megurio_schedule_start' );
+		$renewal_ids     = $this->get_object_meta( $subscription_id, '_megurio_renewal_order_ids' );
 		$renewal_ids     = is_array( $renewal_ids ) ? $renewal_ids : array();
-		$back_url        = wc_get_account_endpoint_url( 'tsfw-subscriptions' );
+		$back_url        = wc_get_account_endpoint_url( 'megurio-subscriptions' );
 		$notes           = wc_get_order_notes(
 			array(
 				'order_id' => $subscription_id,
@@ -935,16 +837,16 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		</table>
 
 		<?php if ( in_array( $status, array( 'pending', 'active', 'on-hold' ), true ) ) : ?>
-			<h3 style="margin-top:24px;">ご利用中のお手続き</h3>
-			<form method="post" action="" onsubmit="return window.confirm('この定期購入をキャンセルします。よろしいですか？');">
-				<?php wp_nonce_field( 'tsfw_front_cancel_subscription' ); ?>
-				<input type="hidden" name="tsfw_front_action" value="cancel_subscription" />
+			<h3 class="megurio-account-heading">ご利用中のお手続き</h3>
+			<form class="megurio-cancel-subscription-form" method="post" action="">
+				<?php wp_nonce_field( 'megurio_front_cancel_subscription' ); ?>
+				<input type="hidden" name="megurio_front_action" value="cancel_subscription" />
 				<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
 				<button type="submit" class="button">この定期購入をキャンセルする</button>
 			</form>
 		<?php endif; ?>
 
-		<h3 style="margin-top:24px;">更新注文</h3>
+		<h3 class="megurio-account-heading">更新注文</h3>
 		<?php if ( empty( $renewal_ids ) ) : ?>
 			<div class="woocommerce-info">まだ更新注文はありません。</div>
 		<?php else : ?>
@@ -975,7 +877,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			</table>
 		<?php endif; ?>
 
-		<h3 style="margin-top:24px;">状態遷移履歴</h3>
+		<h3 class="megurio-account-heading">状態遷移履歴</h3>
 		<?php if ( empty( $notes ) ) : ?>
 			<div class="woocommerce-info">まだ状態の更新履歴はありません。</div>
 		<?php else : ?>
@@ -1016,7 +918,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return;
 		}
 
-		echo wp_kses_post( $this->get_front_subscription_notice_html( $product_id, 'tsfw-subscription-notice tsfw-subscription-notice-archive' ) );
+		echo wp_kses_post( $this->get_front_subscription_notice_html( $product_id, 'megurio-subscription-notice megurio-subscription-notice-archive' ) );
 	}
 
 	/**
@@ -1038,7 +940,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 		$interval_label = $this->get_subscription_interval_label( $product_id );
 		echo wp_kses_post( sprintf(
-			'<p class="tsfw-subscription-notice-single"><span class="tsfw-subscription-badge">定期購入商品</span><span class="tsfw-subscription-interval">%s</span></p>',
+			'<p class="megurio-subscription-notice-single"><span class="megurio-subscription-badge">定期購入商品</span><span class="megurio-subscription-interval">%s</span></p>',
 			esc_html( $interval_label )
 		) );
 	}
@@ -1060,15 +962,15 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return $price_html;
 		}
 
-		$count  = max( 1, absint( get_post_meta( $product_id, '_tsfw_interval_count', true ) ) );
-		$unit   = (string) get_post_meta( $product_id, '_tsfw_interval_unit', true );
+		$count  = max( 1, absint( get_post_meta( $product_id, '_megurio_interval_count', true ) ) );
+		$unit   = (string) get_post_meta( $product_id, '_megurio_interval_unit', true );
 		$suffix = $this->format_price_interval_suffix( $count, $unit );
 
 		if ( '' === $suffix ) {
 			return $price_html;
 		}
 
-		return $price_html . '<span class="tsfw-price-interval">' . esc_html( $suffix ) . '</span>';
+		return $price_html . '<span class="megurio-price-interval">' . esc_html( $suffix ) . '</span>';
 	}
 
 	/**
@@ -1172,72 +1074,33 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	}
 
 	/**
-	 * 前台の定期購入案内用スタイルを出力します。
+	 * 前台の定期購入案内用アセットを読み込みます。
 	 *
 	 * @return void
 	 */
-	public function render_front_styles() {
+	public function enqueue_front_assets() {
 		if ( ! function_exists( 'is_woocommerce' ) ) {
 			return;
 		}
 
-		if ( ! is_shop() && ! is_product_taxonomy() && ! is_product() && ! is_cart() && ! is_checkout() ) {
+		if ( ! is_shop() && ! is_product_taxonomy() && ! is_product() && ! is_cart() && ! is_checkout() && ! is_account_page() ) {
 			return;
 		}
-		?>
-		<style>
-			.tsfw-subscription-notice {
-				margin-top: 0.75em;
-				padding: 0.75em 0.9em;
-				border: 1px solid #d9e6d2;
-				border-radius: 8px;
-				background: #f6fbf2;
-				font-size: 0.95em;
-				line-height: 1.55;
-			}
 
-			.tsfw-subscription-notice strong {
-				display: inline-block;
-				margin-bottom: 0.2em;
-				color: #355b2f;
-			}
+		wp_enqueue_style(
+			'megurio-front',
+			plugins_url( 'assets/css/front.css', dirname( __DIR__ ) . '/megurio-subscriptions-for-woocommerce.php' ),
+			array(),
+			self::PLUGIN_VERSION
+		);
 
-			.tsfw-subscription-notice-archive {
-				font-size: 0.9em;
-			}
-
-			.tsfw-subscription-notice-single {
-				display: flex;
-				align-items: center;
-				gap: 0.5em;
-				margin: 0.4em 0 0.6em;
-				line-height: 1.4;
-			}
-
-			.tsfw-subscription-badge {
-				display: inline-block;
-				padding: 0.1em 0.5em;
-				background: #f0f8eb;
-				border: 1px solid #c2ddb8;
-				border-radius: 4px;
-				font-size: 0.8em;
-				font-weight: 600;
-				color: #355b2f;
-			}
-
-			.tsfw-subscription-interval {
-				font-size: 0.85em;
-				color: #666;
-			}
-
-			.tsfw-price-interval {
-				font-size: 0.7em;
-				font-weight: normal;
-				color: #888;
-				margin-left: 0.15em;
-			}
-		</style>
-		<?php
+		wp_enqueue_script(
+			'megurio-front',
+			plugins_url( 'assets/js/front.js', dirname( __DIR__ ) . '/megurio-subscriptions-for-woocommerce.php' ),
+			array(),
+			self::PLUGIN_VERSION,
+			true
+		);
 	}
 
 	/**
@@ -1256,8 +1119,8 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			$new_options[ $key ] = $option;
 
 			if ( '_downloadable' === $key ) {
-				$new_options['_tsfw_is_subscription'] = array(
-					'id'            => '_tsfw_is_subscription',
+				$new_options['megurio_is_subscription'] = array(
+					'id'            => '_megurio_is_subscription',
 					'wrapper_class' => 'show_if_simple show_if_variable',
 					'label'         => '定期購入',
 					'description'   => 'チェックすると、この商品を定期購入商品として扱います。',
@@ -1266,9 +1129,9 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			}
 		}
 
-		if ( ! isset( $new_options['_tsfw_is_subscription'] ) ) {
-			$new_options['_tsfw_is_subscription'] = array(
-				'id'            => '_tsfw_is_subscription',
+		if ( ! isset( $new_options['megurio_is_subscription'] ) ) {
+			$new_options['megurio_is_subscription'] = array(
+				'id'            => '_megurio_is_subscription',
 				'wrapper_class' => 'show_if_simple show_if_variable',
 				'label'         => '定期購入',
 				'description'   => 'チェックすると、この商品を定期購入商品として扱います。',
@@ -1293,9 +1156,9 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			self::SUBSCRIPTION_TYPE,
 			array(
 				'labels' => array(
-					'name'          => 'テスト定期購入',
-					'singular_name' => 'テスト定期購入',
-					'menu_name'     => 'テスト定期購入',
+					'name'          => 'Megurio 定期購入',
+					'singular_name' => 'Megurio 定期購入',
+					'menu_name'     => 'Megurio 定期購入',
 				),
 				'public'                           => false,
 				'show_ui'                          => true,
@@ -1317,7 +1180,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 				'exclude_from_order_webhooks'      => true,
 				'exclude_from_order_reports'       => true,
 				'exclude_from_order_sales_reports' => true,
-				'class_name'                       => 'TSFW_Subscription_Order',
+				'class_name'                       => 'Megurio_Subscription_Order',
 			)
 		);
 	}
@@ -1329,7 +1192,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return array
 	 */
 	public function register_cron_interval( $schedules ) {
-		$schedules['tsfw_every_thirty_minutes'] = array(
+		$schedules['megurio_every_thirty_minutes'] = array(
 			'interval' => 1800,
 			'display'  => '30 分ごと',
 		);
@@ -1356,11 +1219,11 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		}
 
 		if ( ! wp_next_scheduled( self::ACTION_CREATE_RENEWALS ) ) {
-			wp_schedule_event( time() + 1800, 'tsfw_every_thirty_minutes', self::ACTION_CREATE_RENEWALS );
+			wp_schedule_event( time() + 1800, 'megurio_every_thirty_minutes', self::ACTION_CREATE_RENEWALS );
 		}
 
 		if ( ! wp_next_scheduled( self::ACTION_EXPIRE_SUBSCRIPTIONS ) ) {
-			wp_schedule_event( time() + 1800, 'tsfw_every_thirty_minutes', self::ACTION_EXPIRE_SUBSCRIPTIONS );
+			wp_schedule_event( time() + 1800, 'megurio_every_thirty_minutes', self::ACTION_EXPIRE_SUBSCRIPTIONS );
 		}
 	}
 
@@ -1370,11 +1233,11 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	public function render_product_fields() {
-		echo '<div class="options_group tsfw-subscription-fields" style="display:none;">';
+		echo '<div class="options_group megurio-subscription-fields">';
 
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_tsfw_interval_count',
+				'id'                => '_megurio_interval_count',
 				'label'             => '更新間隔の数値',
 				'type'              => 'number',
 				'custom_attributes' => array(
@@ -1387,7 +1250,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 		woocommerce_wp_select(
 			array(
-				'id'          => '_tsfw_interval_unit',
+				'id'          => '_megurio_interval_unit',
 				'label'       => '更新間隔の単位',
 				'options'     => array(
 					'day'   => '日',
@@ -1401,7 +1264,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_tsfw_expiry_count',
+				'id'                => '_megurio_expiry_count',
 				'label'             => '終了までの数値',
 				'type'              => 'number',
 				'custom_attributes' => array(
@@ -1414,7 +1277,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 		woocommerce_wp_select(
 			array(
-				'id'      => '_tsfw_expiry_unit',
+				'id'      => '_megurio_expiry_unit',
 				'label'   => '終了までの単位',
 				'options' => array(
 					''      => '未設定',
@@ -1434,32 +1297,20 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 *
 	 * @return void
 	 */
-	public function render_admin_script() {
-		global $post;
-
-		if ( ! $post || 'product' !== $post->post_type ) {
+	public function enqueue_admin_scripts() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$screen_post_type = isset( $screen->post_type ) ? $screen->post_type : '';
+		if ( ! $screen || 'product' !== $screen_post_type ) {
 			return;
 		}
-		?>
-		<script type="text/javascript">
-			jQuery(function($) {
-				function tsfwToggleFields() {
-					var checked = $('#_tsfw_is_subscription').is(':checked');
-					$('.tsfw-subscription-fields').toggle(checked);
-				}
 
-				tsfwToggleFields();
-
-				$(document.body).on('wc-init-product-type-options', function() {
-					tsfwToggleFields();
-				});
-
-				$(document).on('change', '#_tsfw_is_subscription', function() {
-					tsfwToggleFields();
-				});
-			});
-		</script>
-		<?php
+		wp_enqueue_script(
+			'megurio-admin-product',
+			plugins_url( 'assets/js/admin-product.js', dirname( __DIR__ ) . '/megurio-subscriptions-for-woocommerce.php' ),
+			array( 'jquery' ),
+			self::PLUGIN_VERSION,
+			true
+		);
 	}
 
 	/**
@@ -1473,19 +1324,19 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return;
 		}
 
-		$is_subscription = isset( $_POST['_tsfw_is_subscription'] ) ? 'yes' : 'no';
+		$is_subscription = isset( $_POST['_megurio_is_subscription'] ) ? 'yes' : 'no';
 
-		update_post_meta( $product_id, '_tsfw_is_subscription', $is_subscription );
+		update_post_meta( $product_id, '_megurio_is_subscription', $is_subscription );
 
-		$interval_count = isset( $_POST['_tsfw_interval_count'] ) ? absint( wp_unslash( $_POST['_tsfw_interval_count'] ) ) : 1;
-		$interval_unit  = isset( $_POST['_tsfw_interval_unit'] ) ? sanitize_text_field( wp_unslash( $_POST['_tsfw_interval_unit'] ) ) : 'month';
-		$expiry_count   = isset( $_POST['_tsfw_expiry_count'] ) ? absint( wp_unslash( $_POST['_tsfw_expiry_count'] ) ) : 0;
-		$expiry_unit    = isset( $_POST['_tsfw_expiry_unit'] ) ? sanitize_text_field( wp_unslash( $_POST['_tsfw_expiry_unit'] ) ) : '';
+		$interval_count = isset( $_POST['_megurio_interval_count'] ) ? absint( wp_unslash( $_POST['_megurio_interval_count'] ) ) : 1;
+		$interval_unit  = isset( $_POST['_megurio_interval_unit'] ) ? sanitize_text_field( wp_unslash( $_POST['_megurio_interval_unit'] ) ) : 'month';
+		$expiry_count   = isset( $_POST['_megurio_expiry_count'] ) ? absint( wp_unslash( $_POST['_megurio_expiry_count'] ) ) : 0;
+		$expiry_unit    = isset( $_POST['_megurio_expiry_unit'] ) ? sanitize_text_field( wp_unslash( $_POST['_megurio_expiry_unit'] ) ) : '';
 
-		update_post_meta( $product_id, '_tsfw_interval_count', max( 1, $interval_count ) );
-		update_post_meta( $product_id, '_tsfw_interval_unit', $interval_unit );
-		update_post_meta( $product_id, '_tsfw_expiry_count', $expiry_count );
-		update_post_meta( $product_id, '_tsfw_expiry_unit', $expiry_unit );
+		update_post_meta( $product_id, '_megurio_interval_count', max( 1, $interval_count ) );
+		update_post_meta( $product_id, '_megurio_interval_unit', $interval_unit );
+		update_post_meta( $product_id, '_megurio_expiry_count', $expiry_count );
+		update_post_meta( $product_id, '_megurio_expiry_unit', $expiry_unit );
 	}
 
 	/**
@@ -1519,12 +1370,12 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return;
 		}
 
-		if ( 'yes' === $this->get_object_meta( $order_id, '_tsfw_has_subscription' ) ) {
+		if ( 'yes' === $this->get_object_meta( $order_id, '_megurio_has_subscription' ) ) {
 			return;
 		}
 
 		if ( ! empty( $this->get_subscription_ids_by_parent_order( $order_id, array( 'pending', 'active', 'on-hold', 'cancelled', 'expired' ) ) ) ) {
-			$this->update_object_meta( $order_id, '_tsfw_has_subscription', 'yes' );
+			$this->update_object_meta( $order_id, '_megurio_has_subscription', 'yes' );
 			return;
 		}
 
@@ -1546,7 +1397,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		}
 
 		if ( $created ) {
-			$this->update_object_meta( $order_id, '_tsfw_has_subscription', 'yes' );
+			$this->update_object_meta( $order_id, '_megurio_has_subscription', 'yes' );
 		}
 	}
 
@@ -1559,11 +1410,11 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return int
 	 */
 	protected function create_subscription_record( WC_Order $order, WC_Order_Item_Product $item, WC_Product $product ) {
-		$subscription = new TSFW_Subscription_Order();
+		$subscription = new Megurio_Subscription_Order();
 		$subscription->set_status( 'pending' );
 		$subscription->set_parent_id( $order->get_id() );
 		$subscription->set_customer_id( $order->get_customer_id() );
-		$subscription->set_created_via( 'tsfw' );
+		$subscription->set_created_via( 'megurio' );
 		$subscription->set_currency( $order->get_currency() );
 		$subscription->set_prices_include_tax( $order->get_prices_include_tax() );
 		$subscription->save();
@@ -1601,28 +1452,28 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		$subscription->save();
 
 		$this->set_subscription_meta( $post_id, array(
-			'_tsfw_parent_order_id'     => $order->get_id(),
-			'_tsfw_customer_id'         => $order->get_customer_id(),
-			'_tsfw_product_id'          => $product->get_id(),
-			'_tsfw_product_name'        => $product->get_name(),
-			'_tsfw_product_qty'         => $item->get_quantity(),
-			'_tsfw_interval_count'      => max( 1, absint( get_post_meta( $product->get_id(), '_tsfw_interval_count', true ) ) ),
-			'_tsfw_interval_unit'       => get_post_meta( $product->get_id(), '_tsfw_interval_unit', true ),
-			'_tsfw_expiry_count'        => absint( get_post_meta( $product->get_id(), '_tsfw_expiry_count', true ) ),
-			'_tsfw_expiry_unit'         => get_post_meta( $product->get_id(), '_tsfw_expiry_unit', true ),
-			'_tsfw_subscription_status' => 'pending',
-			'_tsfw_schedule_start'      => 0,
-			'_tsfw_next_payment'        => 0,
-			'_tsfw_end_date'            => 0,
-			'_tsfw_last_renewal_order'  => 0,
-			'_tsfw_line_subtotal'       => $item->get_subtotal(),
-			'_tsfw_line_subtotal_tax'   => $item->get_subtotal_tax(),
-			'_tsfw_line_total'          => $item->get_total(),
-			'_tsfw_line_tax'            => $item->get_total_tax(),
-			'_tsfw_line_tax_data'       => wp_json_encode( $item->get_taxes() ),
+			'_megurio_parent_order_id'     => $order->get_id(),
+			'_megurio_customer_id'         => $order->get_customer_id(),
+			'_megurio_product_id'          => $product->get_id(),
+			'_megurio_product_name'        => $product->get_name(),
+			'_megurio_product_qty'         => $item->get_quantity(),
+			'_megurio_interval_count'      => max( 1, absint( get_post_meta( $product->get_id(), '_megurio_interval_count', true ) ) ),
+			'_megurio_interval_unit'       => get_post_meta( $product->get_id(), '_megurio_interval_unit', true ),
+			'_megurio_expiry_count'        => absint( get_post_meta( $product->get_id(), '_megurio_expiry_count', true ) ),
+			'_megurio_expiry_unit'         => get_post_meta( $product->get_id(), '_megurio_expiry_unit', true ),
+			'_megurio_subscription_status' => 'pending',
+			'_megurio_schedule_start'      => 0,
+			'_megurio_next_payment'        => 0,
+			'_megurio_end_date'            => 0,
+			'_megurio_last_renewal_order'  => 0,
+			'_megurio_line_subtotal'       => $item->get_subtotal(),
+			'_megurio_line_subtotal_tax'   => $item->get_subtotal_tax(),
+			'_megurio_line_total'          => $item->get_total(),
+			'_megurio_line_tax'            => $item->get_total_tax(),
+			'_megurio_line_tax_data'       => wp_json_encode( $item->get_taxes() ),
 		) );
 
-		$this->update_object_meta( $order->get_id(), '_tsfw_subscription_id', $post_id );
+		$this->update_object_meta( $order->get_id(), '_megurio_subscription_id', $post_id );
 		$order->add_order_note( sprintf( '定期購入レコード #%d を作成しました。', $post_id ) );
 		$subscription->add_order_note( sprintf( '親注文 #%d から作成されました。', $order->get_id() ) );
 
@@ -1647,12 +1498,12 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return;
 		}
 
-		if ( 'yes' === $order->get_meta( '_tsfw_is_renewal_order', true ) ) {
+		if ( 'yes' === $order->get_meta( '_megurio_is_renewal_order', true ) ) {
 			$this->handle_renewal_order_status_change( $order, $new_status );
 			return;
 		}
 
-		if ( 'yes' !== $this->get_object_meta( $order_id, '_tsfw_has_subscription' ) ) {
+		if ( 'yes' !== $this->get_object_meta( $order_id, '_megurio_has_subscription' ) ) {
 			return;
 		}
 
@@ -1683,10 +1534,10 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			$end_date     = $this->calculate_end_date( $subscription_id, $current_time );
 
 			$this->set_subscription_meta( $subscription_id, array(
-				'_tsfw_subscription_status' => 'active',
-				'_tsfw_schedule_start'      => $current_time,
-				'_tsfw_next_payment'        => $next_payment,
-				'_tsfw_end_date'            => $end_date,
+				'_megurio_subscription_status' => 'active',
+				'_megurio_schedule_start'      => $current_time,
+				'_megurio_next_payment'        => $next_payment,
+				'_megurio_end_date'            => $end_date,
 			) );
 
 			$subscription = wc_get_order( $subscription_id );
@@ -1704,14 +1555,14 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	protected function handle_renewal_order_status_change( WC_Order $renewal_order, $new_status ) {
-		$subscription_id = absint( $renewal_order->get_meta( '_tsfw_subscription_id', true ) );
+		$subscription_id = absint( $renewal_order->get_meta( '_megurio_subscription_id', true ) );
 		if ( ! $subscription_id ) {
 			return;
 		}
 
 		if ( 'failed' === $new_status ) {
 			$this->set_subscription_meta( $subscription_id, array(
-				'_tsfw_subscription_status' => 'on-hold',
+				'_megurio_subscription_status' => 'on-hold',
 			) );
 
 			$subscription = wc_get_order( $subscription_id );
@@ -1736,8 +1587,8 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			$next_payment = $this->calculate_next_payment( $subscription_id, $current_time );
 
 			$this->set_subscription_meta( $subscription_id, array(
-				'_tsfw_subscription_status' => 'active',
-				'_tsfw_next_payment'        => $next_payment,
+				'_megurio_subscription_status' => 'active',
+				'_megurio_next_payment'        => $next_payment,
 			) );
 
 			$subscription = wc_get_order( $subscription_id );
@@ -1759,8 +1610,8 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 		foreach ( $subscription_ids as $subscription_id ) {
 			$this->set_subscription_meta( $subscription_id, array(
-				'_tsfw_subscription_status' => 'cancelled',
-				'_tsfw_next_payment'        => 0,
+				'_megurio_subscription_status' => 'cancelled',
+				'_megurio_next_payment'        => 0,
 			) );
 
 			$subscription = wc_get_order( $subscription_id );
@@ -1788,11 +1639,11 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 				'meta_query' => array(
 					'relation' => 'AND',
 					array(
-						'key'   => '_tsfw_subscription_status',
+						'key'   => '_megurio_subscription_status',
 						'value' => 'active',
 					),
 					array(
-						'key'     => '_tsfw_next_payment',
+						'key'     => '_megurio_next_payment',
 						'value'   => $current_time,
 						'compare' => '<=',
 						'type'    => 'NUMERIC',
@@ -1827,17 +1678,17 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 				'meta_query' => array(
 					'relation' => 'AND',
 					array(
-						'key'   => '_tsfw_subscription_status',
+						'key'   => '_megurio_subscription_status',
 						'value' => array( 'active', 'on-hold' ),
 					),
 					array(
-						'key'     => '_tsfw_end_date',
+						'key'     => '_megurio_end_date',
 						'value'   => 0,
 						'compare' => '!=',
 						'type'    => 'NUMERIC',
 					),
 					array(
-						'key'     => '_tsfw_end_date',
+						'key'     => '_megurio_end_date',
 						'value'   => $current_time,
 						'compare' => '<=',
 						'type'    => 'NUMERIC',
@@ -1848,8 +1699,8 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 
 		foreach ( $subscription_ids as $subscription_id ) {
 			$this->set_subscription_meta( $subscription_id, array(
-				'_tsfw_subscription_status' => 'expired',
-				'_tsfw_next_payment'        => 0,
+				'_megurio_subscription_status' => 'expired',
+				'_megurio_next_payment'        => 0,
 			) );
 
 			$subscription = wc_get_order( $subscription_id );
@@ -1877,7 +1728,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return 0;
 		}
 
-		$product_id = absint( $this->get_object_meta( $subscription_id, '_tsfw_product_id' ) );
+		$product_id = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
 		$product    = wc_get_product( $product_id );
 
 		if ( ! $product ) {
@@ -1888,7 +1739,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		$renewal_order = wc_create_order(
 			array(
 				'status'      => 'pending',
-				'customer_id' => absint( $this->get_object_meta( $subscription_id, '_tsfw_customer_id' ) ),
+				'customer_id' => absint( $this->get_object_meta( $subscription_id, '_megurio_customer_id' ) ),
 			)
 		);
 
@@ -1896,18 +1747,18 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return 0;
 		}
 
-		$tax_data = $this->get_object_meta( $subscription_id, '_tsfw_line_tax_data' );
+		$tax_data = $this->get_object_meta( $subscription_id, '_megurio_line_tax_data' );
 		$tax_data = $tax_data ? json_decode( $tax_data, true ) : array();
 
 		$renewal_order->add_product(
 			$product,
-			max( 1, absint( $this->get_object_meta( $subscription_id, '_tsfw_product_qty' ) ) ),
+			max( 1, absint( $this->get_object_meta( $subscription_id, '_megurio_product_qty' ) ) ),
 			array(
 				'totals' => array(
-					'subtotal'     => (float) $this->get_object_meta( $subscription_id, '_tsfw_line_subtotal' ),
-					'subtotal_tax' => (float) $this->get_object_meta( $subscription_id, '_tsfw_line_subtotal_tax' ),
-					'total'        => (float) $this->get_object_meta( $subscription_id, '_tsfw_line_total' ),
-					'tax'          => (float) $this->get_object_meta( $subscription_id, '_tsfw_line_tax' ),
+					'subtotal'     => (float) $this->get_object_meta( $subscription_id, '_megurio_line_subtotal' ),
+					'subtotal_tax' => (float) $this->get_object_meta( $subscription_id, '_megurio_line_subtotal_tax' ),
+					'total'        => (float) $this->get_object_meta( $subscription_id, '_megurio_line_total' ),
+					'tax'          => (float) $this->get_object_meta( $subscription_id, '_megurio_line_tax' ),
 					'tax_data'     => is_array( $tax_data ) ? $tax_data : array(),
 				),
 			)
@@ -1924,20 +1775,20 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		$this->set_object_meta_bulk(
 			$renewal_order->get_id(),
 			array(
-				'_tsfw_is_renewal_order' => 'yes',
-				'_tsfw_subscription_id'  => $subscription_id,
-				'_tsfw_parent_order_id'  => absint( $this->get_object_meta( $subscription_id, '_tsfw_parent_order_id' ) ),
+				'_megurio_is_renewal_order' => 'yes',
+				'_megurio_subscription_id'  => $subscription_id,
+				'_megurio_parent_order_id'  => absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) ),
 			)
 		);
 
-		$renewal_ids   = $this->get_object_meta( $subscription_id, '_tsfw_renewal_order_ids' );
+		$renewal_ids   = $this->get_object_meta( $subscription_id, '_megurio_renewal_order_ids' );
 		$renewal_ids   = is_array( $renewal_ids ) ? $renewal_ids : array();
 		$renewal_ids[] = $renewal_order->get_id();
 
 		$this->set_subscription_meta( $subscription_id, array(
-			'_tsfw_last_renewal_order' => $renewal_order->get_id(),
-			'_tsfw_renewal_order_ids'  => $renewal_ids,
-			'_tsfw_next_payment'       => $this->calculate_next_payment( $subscription_id, $current_time ),
+			'_megurio_last_renewal_order' => $renewal_order->get_id(),
+			'_megurio_renewal_order_ids'  => $renewal_ids,
+			'_megurio_next_payment'       => $this->calculate_next_payment( $subscription_id, $current_time ),
 		) );
 
 		$subscription->add_order_note( sprintf( '更新注文 #%d を作成しました。', $renewal_order->get_id() ) );
@@ -1959,16 +1810,16 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return false;
 		}
 
-		if ( 'yes' === get_post_meta( $product_id, '_tsfw_is_subscription', true ) ) {
+		if ( 'yes' === get_post_meta( $product_id, '_megurio_is_subscription', true ) ) {
 			return true;
 		}
 
 		$parent_id = wp_get_post_parent_id( $product_id );
-		if ( $parent_id && 'yes' === get_post_meta( $parent_id, '_tsfw_is_subscription', true ) ) {
+		if ( $parent_id && 'yes' === get_post_meta( $parent_id, '_megurio_is_subscription', true ) ) {
 			return true;
 		}
 
-		return 'yes' === get_post_meta( $product_id, '_tsfw_is_subscription', true );
+		return 'yes' === get_post_meta( $product_id, '_megurio_is_subscription', true );
 	}
 
 	/**
@@ -2025,8 +1876,8 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return string
 	 */
 	protected function get_subscription_interval_label( $product_id ) {
-		$count = max( 1, absint( get_post_meta( $product_id, '_tsfw_interval_count', true ) ) );
-		$unit  = (string) get_post_meta( $product_id, '_tsfw_interval_unit', true );
+		$count = max( 1, absint( get_post_meta( $product_id, '_megurio_interval_count', true ) ) );
+		$unit  = (string) get_post_meta( $product_id, '_megurio_interval_unit', true );
 
 		return $this->format_interval_label( $count, $unit );
 	}
@@ -2064,7 +1915,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 				'order'      => 'DESC',
 				'meta_query' => array(
 					array(
-						'key'   => '_tsfw_customer_id',
+						'key'   => '_megurio_customer_id',
 						'value' => $user_id,
 					),
 				),
@@ -2080,7 +1931,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return bool
 	 */
 	protected function user_owns_subscription( $subscription_id, $user_id ) {
-		return (int) $this->get_object_meta( $subscription_id, '_tsfw_customer_id' ) === (int) $user_id;
+		return (int) $this->get_object_meta( $subscription_id, '_megurio_customer_id' ) === (int) $user_id;
 	}
 
 	/**
@@ -2099,7 +1950,7 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 		);
 
 		foreach ( $subscription_ids as $subscription_id ) {
-			$status = (string) $this->get_object_meta( $subscription_id, '_tsfw_subscription_status' );
+			$status = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
 			if ( isset( $counts[ $status ] ) ) {
 				$counts[ $status ]++;
 			}
@@ -2172,11 +2023,11 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 				'meta_query' => array(
 					'relation' => 'AND',
 					array(
-						'key'   => '_tsfw_parent_order_id',
+						'key'   => '_megurio_parent_order_id',
 						'value' => $order_id,
 					),
 					array(
-						'key'   => '_tsfw_subscription_status',
+						'key'   => '_megurio_subscription_status',
 						'value' => $statuses,
 					),
 				),
@@ -2192,8 +2043,8 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return int
 	 */
 	protected function calculate_next_payment( $subscription_id, $base_time ) {
-		$count = max( 1, absint( $this->get_object_meta( $subscription_id, '_tsfw_interval_count' ) ) );
-		$unit  = $this->get_object_meta( $subscription_id, '_tsfw_interval_unit' );
+		$count = max( 1, absint( $this->get_object_meta( $subscription_id, '_megurio_interval_count' ) ) );
+		$unit  = $this->get_object_meta( $subscription_id, '_megurio_interval_unit' );
 
 		return $this->add_interval_to_timestamp( $base_time, $count, $unit );
 	}
@@ -2206,8 +2057,8 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 	 * @return int
 	 */
 	protected function calculate_end_date( $subscription_id, $base_time ) {
-		$count = absint( $this->get_object_meta( $subscription_id, '_tsfw_expiry_count' ) );
-		$unit  = $this->get_object_meta( $subscription_id, '_tsfw_expiry_unit' );
+		$count = absint( $this->get_object_meta( $subscription_id, '_megurio_expiry_count' ) );
+		$unit  = $this->get_object_meta( $subscription_id, '_megurio_expiry_unit' );
 
 		if ( empty( $count ) || empty( $unit ) ) {
 			return 0;
@@ -2279,30 +2130,30 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return false;
 		}
 
-		$current_status = (string) $this->get_object_meta( $subscription_id, '_tsfw_subscription_status' );
+		$current_status = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
 		$current_time = current_time( 'timestamp' );
 		$meta_map     = array(
-			'_tsfw_subscription_status' => $target_status,
+			'_megurio_subscription_status' => $target_status,
 		);
 
 		if ( 'active' === $target_status ) {
-			$current_start = (int) $this->get_object_meta( $subscription_id, '_tsfw_schedule_start' );
-			$meta_map['_tsfw_schedule_start'] = $current_start ? $current_start : $current_time;
+			$current_start = (int) $this->get_object_meta( $subscription_id, '_megurio_schedule_start' );
+			$meta_map['_megurio_schedule_start'] = $current_start ? $current_start : $current_time;
 
-			$current_next = (int) $this->get_object_meta( $subscription_id, '_tsfw_next_payment' );
+			$current_next = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
 			if ( empty( $current_next ) || $current_next <= $current_time ) {
-				$meta_map['_tsfw_next_payment'] = $this->calculate_next_payment( $subscription_id, $current_time );
+				$meta_map['_megurio_next_payment'] = $this->calculate_next_payment( $subscription_id, $current_time );
 			}
 
-			$current_end = (int) $this->get_object_meta( $subscription_id, '_tsfw_end_date' );
+			$current_end = (int) $this->get_object_meta( $subscription_id, '_megurio_end_date' );
 			if ( empty( $current_end ) ) {
 				$calculated_end = $this->calculate_end_date( $subscription_id, $current_time );
 				if ( $calculated_end ) {
-					$meta_map['_tsfw_end_date'] = $calculated_end;
+					$meta_map['_megurio_end_date'] = $calculated_end;
 				}
 			}
 		} elseif ( in_array( $target_status, array( 'cancelled', 'expired' ), true ) ) {
-			$meta_map['_tsfw_next_payment'] = 0;
+			$meta_map['_megurio_next_payment'] = 0;
 		}
 
 		$this->set_subscription_meta( $subscription_id, $meta_map );
@@ -2331,10 +2182,10 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			return array();
 		}
 
-		$parent_order_id = absint( $this->get_object_meta( $subscription_id, '_tsfw_parent_order_id' ) );
+		$parent_order_id = absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) );
 		$parent_order    = $parent_order_id ? wc_get_order( $parent_order_id ) : false;
-		$product_id      = absint( $this->get_object_meta( $subscription_id, '_tsfw_product_id' ) );
-		$product_name    = (string) $this->get_object_meta( $subscription_id, '_tsfw_product_name' );
+		$product_id      = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
+		$product_name    = (string) $this->get_object_meta( $subscription_id, '_megurio_product_name' );
 		$product_name    = $product_name ? $product_name : ( $product_id ? get_the_title( $product_id ) : '定期購入商品' );
 		$customer_email  = $parent_order instanceof WC_Order ? $parent_order->get_billing_email() : '';
 		$admin_email     = get_option( 'admin_email' );
@@ -2344,9 +2195,9 @@ if ( ! class_exists( 'Test_Subscription_For_Woocommerce' ) ) {
 			'parent_order'    => $parent_order,
 			'parent_order_id' => $parent_order_id,
 			'product_name'    => $product_name,
-			'next_payment'    => (int) $this->get_object_meta( $subscription_id, '_tsfw_next_payment' ),
-			'end_date'        => (int) $this->get_object_meta( $subscription_id, '_tsfw_end_date' ),
-			'detail_url'      => wc_get_account_endpoint_url( 'tsfw-subscriptions' ),
+			'next_payment'    => (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' ),
+			'end_date'        => (int) $this->get_object_meta( $subscription_id, '_megurio_end_date' ),
+			'detail_url'      => wc_get_account_endpoint_url( 'megurio-subscriptions' ),
 			'recipients'      => array_unique( array_filter( array( $customer_email, $admin_email ) ) ),
 		);
 	}
