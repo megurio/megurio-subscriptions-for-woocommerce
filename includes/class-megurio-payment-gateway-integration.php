@@ -83,7 +83,6 @@ if ( ! class_exists( 'Megurio_Payment_Gateway_Integration' ) ) {
 
 		/**
 		 * HPOS 対応：定期購入レコードのメタを保存します。
-		 * wc_get_order() が返す場合は WC Order API 経由、それ以外は post_meta にフォールバックします。
 		 *
 		 * @param int    $subscription_id 定期購入 ID。
 		 * @param string $meta_key        メタキー。
@@ -95,14 +94,11 @@ if ( ! class_exists( 'Megurio_Payment_Gateway_Integration' ) ) {
 			if ( $subscription instanceof WC_Order ) {
 				$subscription->update_meta_data( $meta_key, $meta_value );
 				$subscription->save();
-				return;
 			}
-			update_post_meta( $subscription_id, $meta_key, $meta_value );
 		}
 
 		/**
 		 * HPOS 対応：定期購入レコードのメタを取得します。
-		 * wc_get_order() が返す場合は WC Order API 経由、それ以外は post_meta にフォールバックします。
 		 *
 		 * @param int    $subscription_id 定期購入 ID。
 		 * @param string $meta_key        メタキー。
@@ -113,7 +109,7 @@ if ( ! class_exists( 'Megurio_Payment_Gateway_Integration' ) ) {
 			if ( $subscription instanceof WC_Order ) {
 				return $subscription->get_meta( $meta_key, true );
 			}
-			return get_post_meta( $subscription_id, $meta_key, true );
+			return null;
 		}
 
 		/**
