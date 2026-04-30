@@ -1,0 +1,630 @@
+# Translation of megurio-subscriptions-for-woocommerce in Japanese
+# Copyright (C) 2024 megurio
+# This file is distributed under the GPL-2.0-or-later license.
+msgid ""
+msgstr ""
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ja\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Manual\n"
+"X-Domain: megurio-subscriptions-for-woocommerce\n"
+
+msgid "Subscription List"
+msgstr "定期購入一覧"
+
+msgid "Subscription status updated."
+msgstr "定期購入状態を更新しました。"
+
+msgid "Renewal order scan executed."
+msgstr "更新注文スキャンを実行しました。"
+
+msgid "Invalid request. Please try again later."
+msgstr "不正なリクエストです。時間をおいて再度お試しください。"
+
+msgid "Subscription not found."
+msgstr "対象の定期購入が見つかりませんでした。"
+
+msgid "This subscription cannot be cancelled at this time."
+msgstr "この定期購入は現在キャンセルできません。"
+
+msgid "Customer cancelled subscription from My Account."
+msgstr "お客様がマイアカウントから定期購入をキャンセルしました。"
+
+msgid "Your subscription has been cancelled."
+msgstr "定期購入をキャンセルしました。"
+
+msgid "Subscription"
+msgstr "定期購入"
+
+msgid "Subscription Product"
+msgstr "定期購入商品"
+
+msgid "Renewal Order"
+msgstr "更新注文"
+
+msgid "Initial Subscription Order"
+msgstr "初回定期購入注文"
+
+msgid "Run Renewal Order Scan Now"
+msgstr "今すぐ更新注文スキャンを実行"
+
+msgid "Count:"
+msgstr "対象件数:"
+
+msgid "Total Subscriptions"
+msgstr "全定期購入件数"
+
+msgid "Active"
+msgstr "有効"
+
+msgid "On Hold"
+msgstr "一時停止"
+
+msgid "Subscription ID"
+msgstr "定期購入 ID"
+
+msgid "Status"
+msgstr "状態"
+
+msgid "Product"
+msgstr "商品"
+
+msgid "Parent Order"
+msgstr "親注文"
+
+msgid "Next Billing Date"
+msgstr "次回請求日"
+
+msgid "Last Renewal Order"
+msgstr "最終更新注文"
+
+msgid "Flow"
+msgstr "流れ"
+
+msgid "No subscription records found."
+msgstr "まだ定期購入レコードはありません。"
+
+msgid "View Details"
+msgstr "詳細を見る"
+
+#. translators: %d: subscription ID
+msgid "Subscription #%d Details"
+msgstr "定期購入 #%d の詳細"
+
+#. translators: %d: renewal order ID
+msgid "Renewal Order #%d"
+msgstr "更新注文 #%d"
+
+msgid "Current Status"
+msgstr "現在の状態"
+
+msgid "Customer ID"
+msgstr "顧客 ID"
+
+msgid "Payment Method"
+msgstr "支払い方法"
+
+msgid "Renewal Interval"
+msgstr "更新間隔"
+
+msgid "Start Date"
+msgstr "開始日時"
+
+msgid "Admin Actions"
+msgstr "管理操作"
+
+msgid "Manually Change Status"
+msgstr "状態を手動変更"
+
+msgid "Pending"
+msgstr "保留"
+
+msgid "Cancelled"
+msgstr "キャンセル"
+
+msgid "Update Status"
+msgstr "状態を更新"
+
+msgid "Auto-Generated Renewal Orders"
+msgstr "自動作成された更新注文"
+
+msgid "Order ID"
+msgstr "注文 ID"
+
+msgid "Created Date"
+msgstr "作成日時"
+
+msgid "Total"
+msgstr "合計"
+
+msgid "No renewal orders have been created yet."
+msgstr "まだ自動作成された更新注文はありません。"
+
+msgid "Status History Notes"
+msgstr "状態遷移メモ"
+
+msgid "No notes yet."
+msgstr "まだメモはありません。"
+
+msgid "Please log in."
+msgstr "ログインしてください。"
+
+msgid "You have no active subscriptions."
+msgstr "現在ご利用中の定期購入はありません。"
+
+msgid "Details"
+msgstr "詳細"
+
+msgid "Subscription Details"
+msgstr "定期購入詳細"
+
+msgid "Back to List"
+msgstr "一覧に戻る"
+
+msgid "Initial Order"
+msgstr "初回注文"
+
+msgid "Manage Subscription"
+msgstr "ご利用中のお手続き"
+
+msgid "Cancel This Subscription"
+msgstr "この定期購入をキャンセルする"
+
+msgid "Renewal Orders"
+msgstr "更新注文"
+
+msgid "No renewal orders yet."
+msgstr "まだ更新注文はありません。"
+
+msgid "Date"
+msgstr "日時"
+
+msgid "Content"
+msgstr "内容"
+
+msgid "Status History"
+msgstr "状態遷移履歴"
+
+msgid "No status history yet."
+msgstr "まだ状態の更新履歴はありません。"
+
+msgid "Subscription Type"
+msgstr "定期購入種別"
+
+msgid "Please enable Stripe or WooPayments card payment for subscription products."
+msgstr "定期購入商品のお支払いには Stripe または WooPayments のカード決済を有効化してください。"
+
+msgid "Only Stripe or WooPayments card payment is available for subscriptions."
+msgstr "定期購入では Stripe または WooPayments のカード決済のみご利用いただけます。"
+
+msgid "Only card payment is available for subscriptions. Please enter your card information."
+msgstr "定期購入ではカード決済のみご利用いただけます。カード情報を入力してお支払いください。"
+
+msgid "* Apple Pay and Google Pay do not support automatic renewal for subscriptions. Please enter your card information directly."
+msgstr "※ Apple Pay・Google Pay は定期購入の自動更新に対応していません。カード情報を直接入力してください。"
+
+msgid "Only Stripe or WooPayments card payment is supported for subscriptions."
+msgstr "定期購入では Stripe または WooPayments のカード決済のみサポートされています。"
+
+msgid "Check to treat this product as a subscription product."
+msgstr "チェックすると、この商品を定期購入商品として扱います。"
+
+msgid "Megurio Subscriptions"
+msgstr "Megurio 定期購入"
+
+msgid "Megurio Subscription"
+msgstr "Megurio 定期購入"
+
+msgid "Every 30 Minutes"
+msgstr "30 分ごと"
+
+msgid "Renewal Interval Number"
+msgstr "更新間隔の数値"
+
+msgid "e.g. 1"
+msgstr "例: 1"
+
+msgid "Renewal Interval Unit"
+msgstr "更新間隔の単位"
+
+msgid "day"
+msgstr "日"
+
+msgid "days"
+msgstr "日"
+
+msgid "week"
+msgstr "週"
+
+msgid "weeks"
+msgstr "週"
+
+msgid "month"
+msgstr "か月"
+
+msgid "months"
+msgstr "か月"
+
+msgid "year"
+msgstr "年"
+
+msgid "years"
+msgstr "年"
+
+msgid "e.g. For monthly billing, enter \"1\" and select \"month\"."
+msgstr "例: 毎月なら「1」を入力し「か月」を選択します。"
+
+#. translators: %s: time unit (day, week, month, year)
+msgid "/%s"
+msgstr "/%s"
+
+#. translators: 1: count, 2: time unit (days, weeks, months, years)
+msgid "/%1$d %2$s"
+msgstr "/%1$d%2$s"
+
+#. translators: %s: time unit (day, week, month, year)
+msgid "Every %s"
+msgstr "%sごと"
+
+#. translators: 1: count, 2: time unit (days, weeks, months, years)
+msgid "Every %1$d %2$s"
+msgstr "%1$d%2$sごと"
+
+#. translators: %d: subscription record ID
+msgid "Subscription record #%d created."
+msgstr "定期購入レコード #%d を作成しました。"
+
+#. translators: %d: parent order ID
+msgid "Created from parent order #%d."
+msgstr "親注文 #%d から作成されました。"
+
+msgid "Subscription activated after confirming initial order payment."
+msgstr "初回注文の入金を確認したため、定期購入を有効化しました。"
+
+msgid "⚠️ Initial order was paid via express checkout (e.g. Apple Pay / Google Pay), so a reusable payment token could not be saved. Automatic renewal may fail. Please ask the customer to update their payment method by entering card details directly."
+msgstr "⚠️ 初回注文が Apple Pay・Google Pay などのエクスプレス決済で支払われたため、再利用可能な決済トークンを保存できませんでした。自動更新課金が失敗する可能性があります。顧客にカード情報を直接入力して支払い方法を更新するよう案内してください。"
+
+#. translators: %d: renewal order ID
+msgid "Renewal order #%d failed due to unsupported payment method. Subscription has been paused."
+msgstr "更新注文 #%d は対応外の支払い方法のため失敗しました。定期購入を一時停止しました。"
+
+#. translators: %d: renewal order ID
+msgid "Renewal order #%d payment failed. Subscription remains active during grace period."
+msgstr "更新注文 #%d の支払いが失敗しました。猶予期間中のため、定期購入は有効のまま維持します。"
+
+#. translators: %d: renewal order ID
+msgid "Renewal order #%d was cancelled, but subscription status was not automatically changed. Please cancel manually if needed."
+msgstr "更新注文 #%d はキャンセルされましたが、定期購入状態は自動変更していません。必要に応じて手動でキャンセルしてください。"
+
+#. translators: %d: renewal order ID
+msgid "Subscription continued after confirming renewal order #%d payment."
+msgstr "更新注文 #%d の入金を確認したため、定期購入を継続しました。"
+
+#. translators: %d: renewal order ID
+msgid "Subscription reactivated after confirming renewal order #%d payment."
+msgstr "更新注文 #%d の入金を確認したため、定期購入を再開しました。"
+
+msgid "Subscription cancelled because parent order was cancelled."
+msgstr "親注文がキャンセルされたため、この定期購入もキャンセルしました。"
+
+#. translators: 1: current retry count, 2: max retries, 3: days until next retry
+msgid "Retry %1$d/%2$d scheduled for %3$d days later."
+msgstr "リトライ %1$d/%2$d 回目を %3$d 日後にスケジュールしました。"
+
+#. translators: 1: renewal order ID, 2: max retries
+msgid "Automatic retries for renewal order #%1$d reached %2$d. Subscription paused, no further auto-charging."
+msgstr "更新注文 #%1$d の自動リトライが %2$d 回に達しました。定期購入を一時停止し、以後自動課金は行いません。"
+
+#. translators: 1: current retry count, 2: max retries
+msgid "Starting auto-retry (%1$d/%2$d)."
+msgstr "自動リトライ（%1$d/%2$d 回目）を開始します。"
+
+msgid "Product not found. Renewal order could not be created."
+msgstr "商品が見つからないため、更新注文を作成できませんでした。"
+
+#. translators: %d: renewal order ID
+msgid "Renewal order #%d created."
+msgstr "更新注文 #%d を作成しました。"
+
+#. translators: %d: subscription ID
+msgid "This renewal order is linked to subscription #%d."
+msgstr "この更新注文は定期購入 #%d に紐づいています。"
+
+#. translators: %s: payment method ID
+msgid "Payment method %s is not supported for subscriptions and has been paused. Please change to Stripe or WooPayments card payment."
+msgstr "支払い方法 %s は定期購入でサポートされていないため、一時停止しました。Stripe または WooPayments のカード決済へ変更してください。"
+
+msgid "Normal"
+msgstr "通常稼働"
+
+msgid "No unpaid renewal orders."
+msgstr "未決済の更新注文はありません。"
+
+msgid "Waiting for initial order confirmation."
+msgstr "初回注文の確定待ちです。"
+
+msgid "Auto-charging is paused."
+msgstr "自動課金は停止しています。"
+
+msgid "No further auto-charging."
+msgstr "以後の自動課金は行いません。"
+
+#. translators: 1: timestamp, 2: remaining time
+msgid "%1$s (%2$s remaining)"
+msgstr "%1$s（残り %2$s）"
+
+msgid "Grace Period"
+msgstr "猶予期間中"
+
+#. translators: %d: renewal order ID
+msgid "Renewal order #%d payment is incomplete. Service remains active."
+msgstr "更新注文 #%d の決済が未完了です。サービスは有効のまま維持されています。"
+
+#. translators: 1: retry label, 2: next retry label, 3: grace remaining label
+msgid "Renewal payment failed, but service is active during grace period. Retries: %1$s, Next retry: %2$s, Grace remaining: %3$s."
+msgstr "更新決済に失敗していますが、猶予期間中のためサービスは有効です。リトライ %1$s、次回リトライ %2$s、猶予残り %3$s。"
+
+#. translators: %d: renewal order ID
+msgid "Max retries reached for renewal order #%d. Auto-charging is paused."
+msgstr "更新注文 #%d のリトライ上限に達したため、自動課金は停止しています。"
+
+msgid "Paused because max renewal retries were reached. Will resume when the pending order is paid."
+msgstr "更新決済のリトライ上限に達したため一時停止中です。対象注文が支払われると再開します。"
+
+#. translators: %d: renewal order ID
+msgid "Renewal order #%d payment is incomplete."
+msgstr "更新注文 #%d の決済が未完了です。"
+
+msgid "Renewal order payment is incomplete."
+msgstr "更新注文の決済が未完了です。"
+
+msgid "soon"
+msgstr "まもなく"
+
+#. translators: 1: days, 2: hours
+msgid "%1$dd %2$dh"
+msgstr "%1$d日%2$d時間"
+
+#. translators: 1: hours, 2: minutes
+msgid "%1$dh %2$dm"
+msgstr "%1$d時間%2$d分"
+
+#. translators: %d: minutes
+msgid "%dm"
+msgstr "%d分"
+
+#. translators: %s: target status
+msgid "Subscription status manually changed to %s from admin."
+msgstr "管理画面から定期購入状態を %s に変更しました。"
+
+msgid "This page shows all subscription records and status flows created by the subscription plugin."
+msgstr "このページでは、定期購入プラグインが作成した定期購入レコードと状態の流れをまとめて確認できます。"
+
+msgid "System"
+msgstr "システム"
+
+msgid "Customer"
+msgstr "お客様"
+
+msgid "Admin"
+msgstr "管理者"
+
+msgid "Parent Order Cancellation"
+msgstr "親注文のキャンセル"
+
+#. translators: %s: site name
+msgid "[%s] Subscription Cancellation Notice"
+msgstr "【%s】定期購入キャンセルのお知らせ"
+
+msgid "Subscription ID:"
+msgstr "定期購入 ID:"
+
+msgid "Product:"
+msgstr "商品:"
+
+msgid "Status:"
+msgstr "状態:"
+
+msgid "Cancellation Reason:"
+msgstr "キャンセル理由:"
+
+msgid "Parent Order:"
+msgstr "親注文:"
+
+msgid "Next Billing Date:"
+msgstr "次回請求日:"
+
+msgid "Please check your My Account for subscription details."
+msgstr "定期購入内容の確認はマイアカウントよりご確認ください。"
+
+msgid "Subscription Cancellation Notice"
+msgstr "定期購入キャンセルのお知らせ"
+
+msgid "Renewal Order Payment Confirmed"
+msgstr "更新注文の入金確認"
+
+#. translators: %s: site name
+msgid "[%s] Subscription Reactivation Notice"
+msgstr "【%s】定期購入再開のお知らせ"
+
+msgid "Your subscription has been reactivated."
+msgstr "定期購入が再開されました。"
+
+msgid "Reactivation Reason:"
+msgstr "再開理由:"
+
+msgid "Subscription Reactivation Notice"
+msgstr "定期購入再開のお知らせ"
+
+#. translators: %d: renewal order ID
+msgid "[Important] Subscription renewal payment failed (Order #%d)"
+msgstr "【重要】定期購入の更新お支払いに失敗しました（注文 #%d）"
+
+#. translators: 1: days until retry, 2: current retry count, 3: max retries
+msgid "We will automatically retry in %1$d days (retry %2$d/%3$d).<br>You can also pay immediately using the link below."
+msgstr "%1$d 日後に自動的に再試行します（リトライ %2$d/%3$d 回目）。<br>それまでの間も、下記リンクからいつでも今すぐお支払いいただけます。"
+
+msgid "Please complete your payment using the link below."
+msgstr "下記リンクからお支払い手続きを完了してください。"
+
+#. translators: 1: customer name, 2: order ID, 3: order total, 4: retry line, 5: pay URL
+msgid "Dear %1$s,<br><br>The automatic renewal payment for your subscription (Order #%2$d, Amount: %3$s) has failed.<br><br>%4$s<br><br><a href=\"%5$s\" style=\"display:inline-block;padding:10px 20px;background:#7f54b3;color:#fff;text-decoration:none;border-radius:4px;\">Pay Now</a><br><br>Your subscription will be automatically resumed once payment is confirmed.<br>Please contact us if you have any questions."
+msgstr "%1$s 様<br><br>定期購入の自動更新（注文 #%2$d、金額: %3$s）の決済処理に失敗しました。<br><br>%4$s<br><br><a href=\"%5$s\" style=\"display:inline-block;padding:10px 20px;background:#7f54b3;color:#fff;text-decoration:none;border-radius:4px;\">今すぐお支払い</a><br><br>お支払いが確認でき次第、定期購入を自動的に再開いたします。<br>ご不明な点がございましたらお問い合わせください。"
+
+msgid "Subscription Renewal Payment Notice"
+msgstr "定期購入の更新お支払いについて"
+
+#. translators: 1: current retry count, 2: max retries, 3: customer email
+msgid "Retry %1$d/%2$d notification email sent to %3$s."
+msgstr "リトライ %1$d/%2$d 回目の通知メールを %3$s へ送信しました。"
+
+#. translators: %d: renewal order ID
+msgid "[Important] Subscription renewal could not be completed (Order #%d)"
+msgstr "【重要】定期購入の更新が完了できませんでした（注文 #%d）"
+
+#. translators: 1: customer name, 2: order ID, 3: order total, 4: max retries + 1, 5: pay URL
+msgid "Dear %1$s,<br><br>We attempted to renew your subscription (Order #%2$d, Amount: %3$s) %4$d times, but all attempts failed.<br><br>No further automatic retries will be made.<br><br>To continue your subscription, please complete payment using the link below.<br>Your subscription will be automatically resumed after payment.<br><br><a href=\"%5$s\" style=\"display:inline-block;padding:10px 20px;background:#7f54b3;color:#fff;text-decoration:none;border-radius:4px;\">Pay Now</a><br><br>Please contact us if you have any questions."
+msgstr "%1$s 様<br><br>定期購入の更新（注文 #%2$d、金額: %3$s）を %4$d 回試みましたが、すべて失敗しました。<br><br>以後、自動での再試行は行いません。<br><br>引き続き定期購入をご利用いただくには、下記リンクからお支払いを完了してください。<br>お支払い後、定期購入は自動的に再開されます。<br><br><a href=\"%5$s\" style=\"display:inline-block;padding:10px 20px;background:#7f54b3;color:#fff;text-decoration:none;border-radius:4px;\">今すぐお支払い</a><br><br>ご不明な点がございましたらお問い合わせください。"
+
+msgid "Subscription Renewal Notice"
+msgstr "定期購入の更新について"
+
+#. translators: 1: max retries, 2: customer email
+msgid "All %1$d retries exhausted. Final notification email sent to %2$s. Auto-charging stopped."
+msgstr "%1$d 回のリトライが尽きたため、最終通知メールを %2$s へ送信しました。自動課金を停止しました。"
+
+
+msgid "Subscriptions"
+msgstr "定期購入一覧"
+
+msgid "Email Settings"
+msgstr "メール設定"
+
+msgid "Email settings saved."
+msgstr "メール設定を保存しました。"
+
+msgid "Subscription Cancelled"
+msgstr "定期購入キャンセル"
+
+msgid "Subscription Reactivated"
+msgstr "定期購入再開"
+
+msgid "Renewal Payment Failed (with retry)"
+msgstr "更新決済失敗（再試行あり）"
+
+msgid "Renewal Payment Failed (retries exhausted)"
+msgstr "更新決済失敗（再試行上限到達）"
+
+msgid "Available variables:"
+msgstr "使用可能な変数："
+
+msgid "Subject"
+msgstr "件名"
+
+msgid "Heading"
+msgstr "見出し"
+
+msgid "Body"
+msgstr "本文"
+
+msgid "Save Email Settings"
+msgstr "メール設定を保存"
+
+msgid "Preview (saved)"
+msgstr "プレビュー（保存済み）"
+
+msgid "Opens the last saved template with sample data in a new window."
+msgstr "最後に保存したテンプレートをサンプルデータで新しいウィンドウに表示します。"
+
+msgid "Invalid preview type."
+msgstr "無効なプレビュータイプです。"
+
+msgid "Subject:"
+msgstr "件名："
+
+msgid "Monthly Subscription Plan"
+msgstr "月額定期購入プラン"
+
+msgid "Taro Yamada"
+msgstr "山田太郎"
+
+msgid "Dear {customer_name},"
+msgstr "{customer_name} 様"
+
+msgid "The automatic renewal payment for your subscription (Order #{order_id}, Amount: {order_total}) has failed."
+msgstr "定期購入（注文 #{order_id}、金額：{order_total}）の自動更新決済が失敗しました。"
+
+msgid "Pay Now"
+msgstr "今すぐお支払い"
+
+msgid "Your subscription will be automatically resumed once payment is confirmed.<br>Please contact us if you have any questions."
+msgstr "お支払いが確認され次第、定期購入は自動的に再開されます。<br>ご不明な点がございましたら、お気軽にお問い合わせください。"
+
+msgid "We attempted to renew your subscription (Order #{order_id}, Amount: {order_total}) {total_attempts} times, but all attempts failed."
+msgstr "定期購入（注文 #{order_id}、金額：{order_total}）の自動更新を {total_attempts} 回試みましたが、すべて失敗しました。"
+
+msgid "No further automatic retries will be made."
+msgstr "以降の自動再試行は行われません。"
+
+msgid "To continue your subscription, please complete payment using the link below.<br>Your subscription will be automatically resumed after payment."
+msgstr "定期購入を継続するには、以下のリンクからお支払いをお願いします。<br>お支払い完了後、定期購入は自動的に再開されます。"
+
+msgid "Please contact us if you have any questions."
+msgstr "ご不明な点がございましたら、お気軽にお問い合わせください。"
+
+msgid "Pause This Subscription"
+msgstr "定期購入を一時停止する"
+
+msgid "Resume This Subscription"
+msgstr "定期購入を再開する"
+
+msgid "This subscription cannot be paused at this time."
+msgstr "現在、この定期購入を一時停止できません。"
+
+msgid "This subscription cannot be resumed at this time."
+msgstr "現在、この定期購入を再開できません。"
+
+msgid "Customer paused subscription from My Account."
+msgstr "顧客がマイアカウントから定期購入を一時停止しました。"
+
+msgid "Customer resumed subscription from My Account."
+msgstr "顧客がマイアカウントから定期購入を再開しました。"
+
+msgid "Your subscription has been paused."
+msgstr "定期購入を一時停止しました。"
+
+msgid "Your subscription has been resumed."
+msgstr "定期購入を再開しました。"
+
+msgid "Change Payment Method"
+msgstr "支払い方法を変更する"
+
+msgid "Save Payment Method"
+msgstr "支払い方法を保存する"
+
+msgid "Current"
+msgstr "現在使用中"
+
+msgid "Payment method cannot be changed for this subscription."
+msgstr "この定期購入の支払い方法は変更できません。"
+
+msgid "Please select a payment method."
+msgstr "支払い方法を選択してください。"
+
+msgid "Invalid payment method selected."
+msgstr "無効な支払い方法が選択されました。"
+
+msgid "Payment method updated."
+msgstr "支払い方法を更新しました。"
+
+msgid "Customer changed payment method to: %s"
+msgstr "顧客が支払い方法を変更しました：%s"
+
+msgid "Sign-up Fee"
+msgstr "初期費用"
+
+msgid "One-time fee charged on the first order only. Leave blank or 0 for no sign-up fee."
+msgstr "初回注文時のみ請求される一回限りの費用です。不要な場合は空欄または 0 にしてください。"

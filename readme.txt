@@ -1,117 +1,186 @@
-=== Megurio 定期購入(サブスク) For WooCommerce（日本向け） ===
+=== Megurio 定期購入 for WooCommerce ===
 Contributors: wapai222
-Tags: subscriptions, recurring payments, woocommerce subscriptions, manual renewal, bacs
+Tags: subscriptions, recurring payments, woocommerce subscriptions, stripe, woocommerce payments
 Requires at least: 6.5
 Tested up to: 6.9
-Requires PHP: 8.0
+Requires PHP: 8.1
 WC requires at least: 8.2
 WC tested up to: 10.6.2
-Stable tag: 0.2.2
+Stable tag: 0.9.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-A lightweight reference plugin for selling manual recurring orders with WooCommerce.
+WooCommerce で定期購入（サブスクリプション）商品を簡単に管理できる日本向けの軽量プラグインです。
 
+== 概要 ==
 
-== Description ==
+Megurio 定期購入 For WooCommerce は、WooCommerce ストアに定期購入機能を追加するシンプルなプラグインです。Stripe / WooCommerce Payments（WCPay）を使ったカード決済の自動課金に対応しており、更新注文の自動生成・決済・メール通知まで一貫して管理できます。
 
-Megurio Subscriptions for WooCommerce is a lightweight subscription-style plugin for WooCommerce stores that want a simple recurring order flow without complex gateway automation.
+日本市場を対象に設計されており、管理画面・顧客向けページの表示は日本語に対応しています。
 
-This plugin focuses on the core lifecycle:
+== 主な機能 ==
 
-* mark products as recurring products
-* create a recurring record after checkout
-* activate the recurring record when the initial order is paid
-* create renewal orders on schedule
-* update recurring status from renewal order results
-* expire recurring records when the configured end date is reached
+**商品設定**
 
+* 通常商品に定期購入フラグを付与して定期購入商品として販売
+* 更新間隔を設定（日・週・月・年 + 任意の数）
+* 初回のみ請求される初期費用（初期費用）の設定
+* バリエーション商品との同時利用に対応
 
-== Features ==
+**定期購入ライフサイクル**
 
-* Add a recurring product checkbox to WooCommerce products
-* Set billing interval and optional end period
-* Create a custom recurring order record using WooCommerce order CRUD
-* Support HPOS-aware order handling
-* Create renewal orders automatically on schedule
-* Mark recurring records as active, on-hold, cancelled, or expired
-* Show recurring information on shop, product, cart, and checkout pages
-* Add a My Account area for recurring list and recurring detail pages
-* Allow customers to cancel their own recurring records from My Account
-* Add an admin page to review recurring records and status flow
-* Send notification emails for cancellation, expiration, and reactivation
-* Restrict recurring products to bank transfer payment only
+* チェックアウト後に定期購入レコードを自動作成
+* 初回注文の支払い完了時にレコードをアクティブ化
+* ActionScheduler による更新注文の自動生成
+* 更新注文の決済結果に応じたステータス自動更新
+* 決済失敗時のリトライ処理（最大試行回数まで自動再試行）
 
-== Basic Flow ==
+**自動課金（Stripe / WCPay 対応）**
 
-1. Mark a product as a recurring product.
-2. A customer places an initial order.
-3. A recurring record is created after checkout.
-4. When the initial order is paid, the recurring record becomes active.
-5. A scheduled task creates the next renewal order when the next billing date arrives.
-6. Renewal order results update the recurring status.
-7. The recurring record expires when the configured end date is reached.
+* WooCommerce Payments（WCPay）のカード決済に対応
+* Stripe for WooCommerce のカード決済に対応
+* 初回注文時に決済トークンを保存し、更新時にオフセッション課金を実行
+* 保存済みカードの変更をマイアカウントから顧客が自分で操作可能
 
-== Statuses ==
+**マイアカウント**
 
-The plugin manages recurring status with its own meta value instead of relying only on WooCommerce order status.
+* 定期購入一覧ページ
+* 定期購入詳細ページ（ステータス・次回請求日・請求間隔を表示）
+* 定期購入のキャンセル（顧客自身で操作可能）
+* 定期購入の一時停止・再開（顧客自身で操作可能）
+* 保存済みカードの変更（定期購入単位で変更可能）
 
-* `pending` - the recurring record exists but is not active yet
-* `active` - the recurring record is active
-* `on-hold` - the recurring record is temporarily paused
-* `cancelled` - the recurring record was cancelled
-* `expired` - the recurring record reached its end date
+**管理画面**
 
-== Limitations ==
+* 定期購入一覧・ステータス確認ページ
+* メール設定タブ（件名・見出し・本文をリッチテキストエディタで編集）
+* メールプレビュー機能（実際のレイアウトをブラウザで確認）
 
-This version does not include:
+**メール通知**
 
-* automatic gateway charging APIs
-* payment token storage
-* free trials
-* sign-up fees
-* automatic retry for failed payments
-* full variable-product subscription support
-* REST API endpoints
-* advanced email settings UI
+* キャンセル通知メール（管理者・顧客）
+* 再開通知メール（管理者・顧客）
+* 決済失敗通知メール（管理者・顧客）
+* 決済リトライ上限到達通知メール（管理者・顧客）
 
-== Installation ==
+**技術仕様**
 
-1. Upload the plugin to the `/wp-content/plugins/` directory.
-2. Activate the plugin through the WordPress plugins screen.
-3. Enable bank transfer in WooCommerce payments if you want to sell recurring products.
-4. Edit a product and enable the recurring product option.
+* メタデータの読み書きは WooCommerce Order CRUD API 経由（HPOS 完全対応）
+* WooCommerce 標準の決済スケジュールフック `woocommerce_scheduled_subscription_payment_{gateway_id}` を使用
+* バリエーション商品は親商品の定期購入設定を参照
 
-== Frequently Asked Questions ==
+== 定期購入のステータス ==
 
-= Is this plugin ready for production use? =
+定期購入レコードは独自のメタ値でステータスを管理します。
 
-This is currently a beta version and is not recommended for production use. It is designed for learning, internal testing, and projects that prefer manual payment handling such as bank transfer.
+* `pending`（保留中）- レコードは作成済みだが未アクティブ
+* `active`（有効）- 定期購入が有効な状態
+* `on-hold`（一時停止）- 一時的に停止中
+* `cancelled`（キャンセル済み）- キャンセルされた状態
 
-= Does this plugin support automatic charging? =
+== 基本的な流れ ==
 
-No. The current version is designed for manual payment operations, especially bank transfer workflows.
+1. 商品に定期購入フラグを設定します。
+2. 顧客がカード決済で初回注文を完了します。
+3. チェックアウト後に定期購入レコードが自動作成されます。
+4. 初回注文の支払いが確認されると、レコードがアクティブになります。
+5. スケジュールされたタスクが次の請求日に更新注文を自動生成します。
+6. Stripe / WCPay への自動課金が実行され、結果に応じてステータスが更新されます。
+7. 決済失敗時はリトライが行われ、上限回数に達すると通知メールが送信されます。
 
-= Can customers cancel from My Account? =
+== 動作要件 ==
 
-Yes. Customers can cancel eligible recurring records from the My Account recurring detail page.
+* PHP 8.1 以上
+* WordPress 6.5 以上
+* WooCommerce 8.2 以上
+* WooCommerce Payments（WCPay）7.0 以上、または Stripe for WooCommerce 7.6 以上
 
-= Does it support HPOS? =
+== インストール ==
 
-The plugin uses WooCommerce order CRUD and is written to work with HPOS-aware order storage.
+1. プラグインを `/wp-content/plugins/` ディレクトリにアップロードします。
+2. WordPress 管理画面の「プラグイン」からプラグインを有効化します。
+3. WooCommerce の支払い設定で Stripe または WooCommerce Payments を有効化します。
+4. 商品編集画面で「定期購入商品」を有効にし、更新間隔を設定します。
 
-== Changelog ==
+== よくある質問 ==
+
+= 自動課金に対応していますか？ =
+
+はい。WooCommerce Payments（WCPay）および Stripe for WooCommerce のカード決済による自動課金に対応しています。初回注文時に保存された決済トークンを使って、更新日にオフセッション課金を自動実行します。
+
+= PayPal など他の決済手段は使えますか？ =
+
+現時点では WooCommerce Payments と Stripe のカード決済のみサポートしています。日本市場向けの設計上、他のゲートウェイへの対応は今後の課題です。
+
+= 顧客は自分で定期購入を操作できますか？ =
+
+はい。マイアカウントの定期購入詳細ページから、キャンセル・一時停止・再開・支払い方法の変更が可能です。
+
+= バリエーション商品で定期購入は使えますか？ =
+
+はい。バリエーション商品は親商品に設定された定期購入の間隔・初期費用を参照するため、バリエーション単位で個別設定する必要はありません。
+
+= メール文面を変更できますか？ =
+
+はい。管理画面の「メール設定」タブから、各メールの件名・見出し・本文をリッチテキストエディタで編集できます。プレビュー機能で送信前に表示を確認することも可能です。
+
+= 無料ですか？ =
+
+はい。上紹介している機能は無料でご利用できます。
+
+= 不具合や要望はどこに報告すればよいですか？ =
+
+不具合の報告・機能のご要望は、公式サイトのお問い合わせページよりお寄せください。
+
+[https://megurio.jp/question/](https://megurio.jp/question/)
+
+皆さまのフィードバックをお待ちしております。
+
+== 変更履歴 ==
+
+= 0.9.1 =
+
+**自動課金**
+
+* Stripe for WooCommerce および WooCommerce Payments（WCPay）によるカード決済のオフセッション自動課金に対応しました。
+* 初回注文時に決済トークンを保存し、更新注文へ自動で引き継ぐようにしました。
+* 決済失敗時の自動リトライ処理を追加しました（リトライ上限到達時は管理者・顧客へ通知）。
+
+**マイアカウント機能拡張**
+
+* 定期購入の一時停止・再開機能を追加しました（一時停止中は次回請求がスキップされます）。
+* 定期購入詳細ページに支払い方法変更フォームを追加しました（保存済みカードから選択可能）。
+
+**商品設定**
+
+* 初期費用（初回注文のみ請求される一回限りの費用）の設定機能を追加しました。
+* バリエーション商品の定期購入設定を修正しました（バリエーション ID でなく親商品の設定を正しく参照するように変更）。
+
+**管理画面**
+
+* メール設定タブを追加しました（件名・見出し・本文をリッチテキストエディタで編集可能）。
+* メールプレビュー機能を追加しました（実際の WooCommerce メールレイアウトでブラウザ確認可能）。
+
+**品質・互換性**
+
+* WooCommerce HPOS（カスタム注文テーブル）への完全対応を宣言しました。
+* 定期購入メタの読み書きを WooCommerce Order CRUD API 経由に統一しました（直接 post_meta を操作しないよう修正）。
+* プラグイン名を「Megurio 定期購入 for WooCommerce」に変更しました。
+* readme.txt を日本語に全面改訂しました。
 
 = 0.2.2 =
 
-* CSS/JS の直接出力を廃止し、専用ファイルを wp_enqueue_style() / wp_enqueue_script() で読み込むように修正しました。
-* 以前のテスト用または未接頭辞の宣言、内部フック、保存データキーを megurio 接頭辞に統一しました。
-* プラグインヘッダーに Requires Plugins: woocommerce を追加しました。
+* CSS/JS の直接出力を廃止し、`wp_enqueue_style()` / `wp_enqueue_script()` で読み込むように修正しました。
+* 各種フック・保存データキーを `megurio_` 接頭辞に統一しました。
+* プラグインヘッダーに `Requires Plugins: woocommerce` を追加しました。
 
 = 0.2.1 =
 
-* Added recurring product flow
-* Added admin recurring management page
-* Added My Account recurring pages
-* Added recurring notification emails
-* Restricted recurring checkout to bank transfer
+* 定期購入商品フローを追加しました。
+* 管理画面の定期購入管理ページを追加しました。
+* マイアカウントの定期購入ページを追加しました。
+* 定期購入通知メールを追加しました。
+
+全バージョンの変更履歴は GitHub リリースページをご覧ください。
+
+https://github.com/megurio/megurio-subscriptions-for-woocommerce/releases
