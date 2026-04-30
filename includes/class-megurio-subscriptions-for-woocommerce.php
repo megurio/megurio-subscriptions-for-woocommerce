@@ -12,7 +12,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	/**
 	 * プラグイン内部バージョンです。
 	 */
-	const PLUGIN_VERSION = '0.2.1';
+	const PLUGIN_VERSION = MEGURIO_SUBSCRIPTIONS_FOR_WOOCOMMERCE_VERSION;
 
 	/**
 	 * 決済ゲートウェイ連携インスタンスです。
@@ -644,6 +644,10 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 						<div><?php esc_html_e( 'On Hold', 'megurio-subscriptions-for-woocommerce' ); ?></div>
 						<strong><?php echo esc_html( $counts['on-hold'] ); ?></strong>
 					</div>
+					<div class="megurio-admin-card">
+						<div><?php esc_html_e( 'Cancelled', 'megurio-subscriptions-for-woocommerce' ); ?></div>
+						<strong><?php echo esc_html( $counts['cancelled'] ); ?></strong>
+					</div>
 				</div>
 
 			<table class="megurio-admin-table">
@@ -652,6 +656,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 							<th><?php esc_html_e( 'Subscription ID', 'megurio-subscriptions-for-woocommerce' ); ?></th>
 							<th><?php esc_html_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
 							<th><?php esc_html_e( 'Product', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<th><?php esc_html_e( 'Total', 'megurio-subscriptions-for-woocommerce' ); ?></th>
 							<th><?php esc_html_e( 'Parent Order', 'megurio-subscriptions-for-woocommerce' ); ?></th>
 							<th><?php esc_html_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
 							<th><?php esc_html_e( 'Last Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></th>
@@ -661,12 +666,13 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				<tbody>
 						<?php if ( empty( $subscription_ids ) ) : ?>
 							<tr>
-								<td colspan="7"><?php esc_html_e( 'No subscription records found.', 'megurio-subscriptions-for-woocommerce' ); ?></td>
+								<td colspan="8"><?php esc_html_e( 'No subscription records found.', 'megurio-subscriptions-for-woocommerce' ); ?></td>
 							</tr>
 					<?php else : ?>
 						<?php foreach ( $subscription_ids as $subscription_id ) : ?>
 								<?php
 								$status          = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
+								$subscription    = wc_get_order( $subscription_id );
 								$product_id      = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
 								$parent_order_id = absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) );
 								$next_payment    = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
@@ -690,6 +696,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 										-
 									<?php endif; ?>
 								</td>
+								<td><?php echo $subscription instanceof WC_Order ? wp_kses_post( $subscription->get_formatted_order_total() ) : '-'; ?></td>
 								<td>
 									<?php if ( $parent_order_id ) : ?>
 										<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $parent_order_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $parent_order_id ); ?></a>
@@ -938,13 +945,6 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$renewal_ids     = $this->get_object_meta( $subscription_id, '_megurio_renewal_order_ids' );
 		$renewal_ids     = is_array( $renewal_ids ) ? $renewal_ids : array();
 		$back_url        = wc_get_account_endpoint_url( 'megurio-subscriptions' );
-		$notes           = wc_get_order_notes(
-			array(
-				'order_id' => $subscription_id,
-				'orderby'  => 'date_created',
-				'order'    => 'DESC',
-			)
-		);
 
 		echo '<h2>' . esc_html__( 'Subscription Details', 'megurio-subscriptions-for-woocommerce' ) . '</h2>';
 		echo '<p><a href="' . esc_url( $back_url ) . '">' . esc_html__( 'Back to List', 'megurio-subscriptions-for-woocommerce' ) . '</a></p>';
@@ -1075,27 +1075,6 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			</table>
 		<?php endif; ?>
 
-		<h3 class="megurio-account-heading"><?php esc_html_e( 'Status History', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
-		<?php if ( empty( $notes ) ) : ?>
-			<div class="woocommerce-info"><?php esc_html_e( 'No status history yet.', 'megurio-subscriptions-for-woocommerce' ); ?></div>
-		<?php else : ?>
-			<table class="shop_table shop_table_responsive my_account_orders account-orders-table">
-				<thead>
-					<tr>
-						<th><?php esc_html_e( 'Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-						<th><?php esc_html_e( 'Content', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-					</tr>
-				</thead>
-				<tbody>
-					<?php foreach ( $notes as $note ) : ?>
-						<tr>
-							<td data-title="<?php esc_attr_e( 'Date', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo esc_html( $this->format_datetime_string( $note->date_created ) ); ?></td>
-							<td data-title="<?php esc_attr_e( 'Content', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo wp_kses_post( $this->link_order_references_in_account_note( $note->content, get_current_user_id() ) ); ?></td>
-						</tr>
-					<?php endforeach; ?>
-				</tbody>
-			</table>
-		<?php endif; ?>
 		<?php
 	}
 
@@ -1136,12 +1115,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
-		$interval_label = $this->get_subscription_interval_label( $product_id );
-		echo wp_kses_post( sprintf(
-			'<p class="megurio-subscription-notice-single"><span class="megurio-subscription-badge">%s</span><span class="megurio-subscription-interval">%s</span></p>',
-			esc_html__( 'Subscription Product', 'megurio-subscriptions-for-woocommerce' ),
-			esc_html( $interval_label )
-		) );
+		echo wp_kses_post( $this->get_front_subscription_notice_html( $product_id, 'megurio-subscription-notice megurio-subscription-notice-single' ) );
 	}
 
 	/**
@@ -1162,8 +1136,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		$meta_id = $this->get_meta_product_id( $product_id );
-		$count   = max( 1, absint( get_post_meta( $meta_id, '_megurio_interval_count', true ) ) );
-		$unit    = (string) get_post_meta( $meta_id, '_megurio_interval_unit', true );
+		$count   = max( 1, absint( $this->get_product_meta( $meta_id, '_megurio_interval_count' ) ) );
+		$unit    = (string) $this->get_product_meta( $meta_id, '_megurio_interval_unit' );
 		$suffix  = $this->format_price_interval_suffix( $count, $unit );
 
 		if ( '' === $suffix ) {
@@ -1234,7 +1208,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			'value' => $this->get_subscription_interval_label( $product_id ),
 		);
 
-		$signup_fee = (float) get_post_meta( $product_id, '_megurio_signup_fee', true );
+		$signup_fee = (float) $this->get_product_meta( $this->get_meta_product_id( $product_id ), '_megurio_signup_fee' );
 		if ( $signup_fee > 0 ) {
 			$item_data[] = array(
 				'key'   => __( 'Sign-up Fee', 'megurio-subscriptions-for-woocommerce' ),
@@ -1264,7 +1238,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				continue;
 			}
 
-			$fee = (float) get_post_meta( $product_id, '_megurio_signup_fee', true );
+			$fee = (float) $this->get_product_meta( $this->get_meta_product_id( $product_id ), '_megurio_signup_fee' );
 			if ( $fee > 0 ) {
 				$total_signup_fee += $fee * absint( $cart_item['quantity'] );
 			}
@@ -1815,16 +1789,20 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		$is_subscription = isset( $_POST['_megurio_is_subscription'] ) ? 'yes' : 'no';
 
-		update_post_meta( $product_id, '_megurio_is_subscription', $is_subscription );
+		$interval_count = isset( $_POST['_megurio_interval_count'] ) ? absint( wp_unslash( $_POST['_megurio_interval_count'] ) ) : 1;
+		$interval_unit  = isset( $_POST['_megurio_interval_unit'] ) ? sanitize_text_field( wp_unslash( $_POST['_megurio_interval_unit'] ) ) : 'month';
+		$signup_fee     = isset( $_POST['_megurio_signup_fee'] ) ? wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['_megurio_signup_fee'] ) ) ) : '';
 
-			$interval_count = isset( $_POST['_megurio_interval_count'] ) ? absint( wp_unslash( $_POST['_megurio_interval_count'] ) ) : 1;
-			$interval_unit  = isset( $_POST['_megurio_interval_unit'] ) ? sanitize_text_field( wp_unslash( $_POST['_megurio_interval_unit'] ) ) : 'month';
-			$signup_fee     = isset( $_POST['_megurio_signup_fee'] ) ? wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['_megurio_signup_fee'] ) ) ) : '';
-
-			update_post_meta( $product_id, '_megurio_interval_count', max( 1, $interval_count ) );
-			update_post_meta( $product_id, '_megurio_interval_unit', $interval_unit );
-			update_post_meta( $product_id, '_megurio_signup_fee', $signup_fee );
-		}
+		$this->set_product_meta_bulk(
+			$product_id,
+			array(
+				'_megurio_is_subscription' => $is_subscription,
+				'_megurio_interval_count'  => max( 1, $interval_count ),
+				'_megurio_interval_unit'   => $interval_unit,
+				'_megurio_signup_fee'      => $signup_fee,
+			)
+		);
+	}
 
 	/**
 	 * 注文確定直後に定期購入レコードを作成します。
@@ -1948,9 +1926,9 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			'_megurio_payment_method'      => $order->get_payment_method(),
 			'_megurio_payment_method_title' => $order->get_payment_method_title(),
 			'_megurio_product_qty'         => $item->get_quantity(),
-			'_megurio_interval_count'      => max( 1, absint( get_post_meta( $meta_product_id, '_megurio_interval_count', true ) ) ),
-			'_megurio_interval_unit'       => get_post_meta( $meta_product_id, '_megurio_interval_unit', true ),
-			'_megurio_signup_fee'          => (float) get_post_meta( $meta_product_id, '_megurio_signup_fee', true ),
+			'_megurio_interval_count'      => max( 1, absint( $this->get_product_meta( $meta_product_id, '_megurio_interval_count' ) ) ),
+			'_megurio_interval_unit'       => $this->get_product_meta( $meta_product_id, '_megurio_interval_unit' ),
+			'_megurio_signup_fee'          => (float) $this->get_product_meta( $meta_product_id, '_megurio_signup_fee' ),
 			'_megurio_subscription_status' => 'pending',
 			'_megurio_schedule_start'      => 0,
 			'_megurio_next_payment'        => 0,
@@ -2041,7 +2019,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 				// トークンが保存されなかった場合（Apple Pay / Google Pay など）は管理者に警告する。
 				if ( $this->gateway_integration->is_auto_charge_gateway( $order->get_payment_method() )
-					&& ! get_post_meta( $subscription_id, '_megurio_payment_token_id', true )
+					&& ! $this->get_object_meta( $subscription_id, '_megurio_payment_token_id' )
 				) {
 					$subscription->add_order_note(
 						__( '⚠️ Initial order was paid via express checkout (e.g. Apple Pay / Google Pay), so a reusable payment token could not be saved. Automatic renewal may fail. Please ask the customer to update their payment method by entering card details directly.', 'megurio-subscriptions-for-woocommerce' )
@@ -2745,16 +2723,16 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return false;
 		}
 
-		if ( 'yes' === get_post_meta( $product_id, '_megurio_is_subscription', true ) ) {
+		if ( 'yes' === $this->get_product_meta( $product_id, '_megurio_is_subscription' ) ) {
 			return true;
 		}
 
 		$parent_id = wp_get_post_parent_id( $product_id );
-		if ( $parent_id && 'yes' === get_post_meta( $parent_id, '_megurio_is_subscription', true ) ) {
+		if ( $parent_id && 'yes' === $this->get_product_meta( $parent_id, '_megurio_is_subscription' ) ) {
 			return true;
 		}
 
-		return 'yes' === get_post_meta( $product_id, '_megurio_is_subscription', true );
+		return false;
 	}
 
 	/**
@@ -2769,6 +2747,41 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$product_id = absint( $product_id );
 		$parent_id  = wp_get_post_parent_id( $product_id );
 		return $parent_id ? $parent_id : $product_id;
+	}
+
+	/**
+	 * 商品メタを WooCommerce Product CRUD 経由で取得します。
+	 *
+	 * @param int    $product_id 商品 ID。
+	 * @param string $meta_key   メタキー。
+	 * @return mixed
+	 */
+	protected function get_product_meta( $product_id, $meta_key ) {
+		$product = wc_get_product( $product_id );
+		if ( $product instanceof WC_Product ) {
+			return $product->get_meta( $meta_key, true );
+		}
+
+		return null;
+	}
+
+	/**
+	 * 商品メタを WooCommerce Product CRUD 経由でまとめて保存します。
+	 *
+	 * @param int   $product_id 商品 ID。
+	 * @param array $meta_map   保存するメタ。
+	 * @return void
+	 */
+	protected function set_product_meta_bulk( $product_id, array $meta_map ) {
+		$product = wc_get_product( $product_id );
+		if ( ! $product instanceof WC_Product ) {
+			return;
+		}
+
+		foreach ( $meta_map as $meta_key => $meta_value ) {
+			$product->update_meta_data( $meta_key, $meta_value );
+		}
+		$product->save();
 	}
 
 	/**
@@ -3030,14 +3043,27 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 */
 	protected function get_front_subscription_notice_html( $product_id, $class = '' ) {
 		$interval_label = $this->get_subscription_interval_label( $product_id );
+		$signup_fee     = (float) $this->get_product_meta( $this->get_meta_product_id( $product_id ), '_megurio_signup_fee' );
 		$class_attr     = trim( $class );
-
-		return sprintf(
-			'<div class="%1$s"><strong>%2$s</strong><div>%3$s: %4$s</div></div>',
-			esc_attr( $class_attr ),
-			esc_html__( 'Subscription Product', 'megurio-subscriptions-for-woocommerce' ),
+		$details        = sprintf(
+			'<div>%1$s: %2$s</div>',
 			esc_html__( 'Renewal Interval', 'megurio-subscriptions-for-woocommerce' ),
 			esc_html( $interval_label )
+		);
+
+		if ( $signup_fee > 0 ) {
+			$details .= sprintf(
+				'<div>%1$s: %2$s</div>',
+				esc_html__( 'Sign-up Fee', 'megurio-subscriptions-for-woocommerce' ),
+				wp_kses_post( wc_price( $signup_fee ) )
+			);
+		}
+
+		return sprintf(
+			'<div class="%1$s"><strong>%2$s</strong>%3$s</div>',
+			esc_attr( $class_attr ),
+			esc_html__( 'Subscription Product', 'megurio-subscriptions-for-woocommerce' ),
+			$details
 		);
 	}
 
@@ -3049,8 +3075,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 */
 	protected function get_subscription_interval_label( $product_id ) {
 		$meta_id = $this->get_meta_product_id( $product_id );
-		$count   = max( 1, absint( get_post_meta( $meta_id, '_megurio_interval_count', true ) ) );
-		$unit    = (string) get_post_meta( $meta_id, '_megurio_interval_unit', true );
+		$count   = max( 1, absint( $this->get_product_meta( $meta_id, '_megurio_interval_count' ) ) );
+		$unit    = (string) $this->get_product_meta( $meta_id, '_megurio_interval_unit' );
 
 		return $this->format_interval_label( $count, $unit );
 	}
@@ -3924,7 +3950,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return $order->get_meta( $meta_key, true );
 		}
 
-		return get_post_meta( $object_id, $meta_key, true );
+		return null;
 	}
 
 	/**
@@ -3953,17 +3979,14 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 */
 	protected function set_object_meta_bulk( $object_id, array $meta_map ) {
 		$order = wc_get_order( $object_id );
-		if ( $order instanceof WC_Order ) {
-			foreach ( $meta_map as $meta_key => $meta_value ) {
-				$order->update_meta_data( $meta_key, $meta_value );
-			}
-			$order->save();
+		if ( ! $order instanceof WC_Order ) {
 			return;
 		}
 
 		foreach ( $meta_map as $meta_key => $meta_value ) {
-			update_post_meta( $object_id, $meta_key, $meta_value );
+			$order->update_meta_data( $meta_key, $meta_value );
 		}
+		$order->save();
 	}
 	}
 }

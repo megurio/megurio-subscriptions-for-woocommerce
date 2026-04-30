@@ -19,11 +19,8 @@
 }
 
 .megurio-subscription-notice-single {
-	display: flex;
-	align-items: center;
-	gap: 0.5em;
 	margin: 0.4em 0 0.6em;
-	line-height: 1.4;
+	max-width: 520px;
 }
 
 .megurio-subscription-badge {
