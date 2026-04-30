@@ -52,3 +52,14 @@
 .megurio-account-heading {
 	margin-top: 24px;
 }
+
+.megurio-express-checkout-notice {
+	margin: 8px 0 0;
+	padding: 7px 10px;
+	border-left: 3px solid #f0a500;
+	background: #fffbf0;
+	border-radius: 0 4px 4px 0;
+	font-size: 0.82em;
+	color: #5a4a00;
+	line-height: 1.5;
+}
