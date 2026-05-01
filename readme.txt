@@ -6,167 +6,46 @@ Tested up to: 6.9
 Requires PHP: 8.1
 WC requires at least: 8.2
 WC tested up to: 10.6.2
-Stable tag: 0.9.3
+Stable tag: 0.9.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-WooCommerce で定期購入（サブスクリプション）商品を簡単に管理できる日本向けの軽量プラグインです。
+Adds subscription product sales and management features to WooCommerce stores.
 
-== 概要 ==
+== Description ==
 
-Megurio 定期購入 For WooCommerce は、WooCommerce ストアに定期購入機能を追加するシンプルなプラグインです。Stripe / WooCommerce Payments（WCPay）を使ったカード決済の自動課金に対応しており、更新注文の自動生成・決済・メール通知まで一貫して管理できます。
+Megurio Subscriptions for WooCommerce helps WooCommerce stores sell and manage subscription products. It adds the core subscription workflow, including product-level billing intervals, sign-up fees, renewal orders, automatic recurring payments, customer subscription management, and admin subscription tracking.
 
-日本市場を対象に設計されており、管理画面・顧客向けページの表示は日本語に対応しています。
+The plugin supports card-based automatic recurring payments with Stripe and WooCommerce Payments. After the first purchase, renewal order creation, payment processing, status updates, and customer notifications can be managed from WooCommerce.
 
-== 主な機能 ==
+Key features include:
 
-**商品設定**
+* Subscription product settings, including daily, weekly, monthly, or yearly billing intervals, sign-up fees, and variable product support
+* Automatic card renewal payments with Stripe and WooCommerce Payments
+* Automatic renewal order creation and status management based on payment results
+* Customer self-service actions for cancellation, pause, resume, and payment method changes
+* Admin subscription list, status tracking, and editable notification email templates
+* HPOS support for WooCommerce custom order tables
 
-* 通常商品に定期購入フラグを付与して定期購入商品として販売
-* 更新間隔を設定（日・週・月・年 + 任意の数）
-* 初回のみ請求される初期費用（初期費用）の設定
-* バリエーション商品との同時利用に対応
+For detailed usage, setup instructions, and support information, please visit the official website.
 
-**定期購入ライフサイクル**
+https://megurio.jp/
 
-* チェックアウト後に定期購入レコードを自動作成
-* 初回注文の支払い完了時にレコードをアクティブ化
-* ActionScheduler による更新注文の自動生成
-* 更新注文の決済結果に応じたステータス自動更新
-* 決済失敗時のリトライ処理（最大試行回数まで自動再試行）
+== Changelog ==
 
-**自動課金（Stripe / WCPay 対応）**
+= 0.9.5 =
 
-* WooCommerce Payments（WCPay）のカード決済に対応
-* Stripe for WooCommerce のカード決済に対応
-* 初回注文時に決済トークンを保存し、更新時にオフセッション課金を実行
-* 保存済みカードの変更をマイアカウントから顧客が自分で操作可能
+**New Features**
 
-**マイアカウント**
+* Added a clearer retry-state label for active subscriptions after a renewal payment failure.
+* Simplified the WordPress.org readme into a concise English overview with key features and official links.
+* Updated the plugin version and readme stable tag to 0.9.5.
 
-* 定期購入一覧ページ
-* 定期購入詳細ページ（ステータス・次回請求日・請求間隔を表示）
-* 定期購入のキャンセル（顧客自身で操作可能）
-* 定期購入の一時停止・再開（顧客自身で操作可能）
-* 保存済みカードの変更（定期購入単位で変更可能）
+**Bug Fixes**
 
-**管理画面**
+* Improved the status display so subscriptions in the renewal retry grace period can be distinguished from normal active subscriptions.
+* Updated and regenerated the Japanese translation files for the new retry-state label.
 
-* 定期購入一覧・ステータス確認ページ
-* メール設定タブ（件名・見出し・本文をリッチテキストエディタで編集）
-* メールプレビュー機能（実際のレイアウトをブラウザで確認）
+For the full changelog of all versions, please see the GitHub releases page.
 
-**メール通知**
-
-* キャンセル通知メール（管理者・顧客）
-* 再開通知メール（管理者・顧客）
-* 決済失敗通知メール（管理者・顧客）
-* 決済リトライ上限到達通知メール（管理者・顧客）
-
-**技術仕様**
-
-* メタデータの読み書きは WooCommerce Order CRUD API 経由（HPOS 完全対応）
-* WooCommerce 標準の決済スケジュールフック `woocommerce_scheduled_subscription_payment_{gateway_id}` を使用
-* バリエーション商品は親商品の定期購入設定を参照
-
-== スクリーンショット ==
-
-1. 管理画面の定期購入一覧ページ
-2. 定期購入注文詳細
-3. 定期購入注文ステータス変更後のメール設定
-4. マイアカウントの定期購入リスト
-5. マイアカウントの定期購入詳細ページ
-6. 商品編集画面の定期購入設定
-
-== 定期購入のステータス ==
-
-定期購入レコードは独自のメタ値でステータスを管理します。
-
-* `pending`（保留中）- レコードは作成済みだが未アクティブ
-* `active`（有効）- 定期購入が有効な状態
-* `on-hold`（一時停止）- 一時的に停止中
-* `cancelled`（キャンセル済み）- キャンセルされた状態
-
-== 基本的な流れ ==
-
-1. 商品に定期購入フラグを設定します。
-2. 顧客がカード決済で初回注文を完了します。
-3. チェックアウト後に定期購入レコードが自動作成されます。
-4. 初回注文の支払いが確認されると、レコードがアクティブになります。
-5. スケジュールされたタスクが次の請求日に更新注文を自動生成します。
-6. Stripe / WCPay への自動課金が実行され、結果に応じてステータスが更新されます。
-7. 決済失敗時はリトライが行われ、上限回数に達すると通知メールが送信されます。
-
-== 動作要件 ==
-
-* PHP 8.1 以上
-* WordPress 6.5 以上
-* WooCommerce 8.2 以上
-* WooCommerce Payments（WCPay）7.0 以上、または Stripe for WooCommerce 7.6 以上
-
-== インストール ==
-
-1. プラグインを `/wp-content/plugins/` ディレクトリにアップロードします。
-2. WordPress 管理画面の「プラグイン」からプラグインを有効化します。
-3. WooCommerce の支払い設定で Stripe または WooCommerce Payments を有効化します。
-4. 商品編集画面で「定期購入商品」を有効にし、更新間隔を設定します。
-
-== Frequently Asked Questions ==
-
-= 自動課金に対応していますか？ =
-
-はい。WooCommerce Payments（WCPay）および Stripe for WooCommerce のカード決済による自動課金に対応しています。初回注文時に保存された決済トークンを使って、更新日にオフセッション課金を自動実行します。
-
-= PayPal など他の決済手段は使えますか？ =
-
-現時点では WooCommerce Payments と Stripe のカード決済のみサポートしています。日本市場向けの設計上、他のゲートウェイへの対応は今後の課題です。
-
-= 顧客は自分で定期購入を操作できますか？ =
-
-はい。マイアカウントの定期購入詳細ページから、キャンセル・一時停止・再開・支払い方法の変更が可能です。
-
-= バリエーション商品で定期購入は使えますか？ =
-
-はい。バリエーション商品は親商品に設定された定期購入の間隔・初期費用を参照するため、バリエーション単位で個別設定する必要はありません。
-
-= メール文面を変更できますか？ =
-
-はい。管理画面の「メール設定」タブから、各メールの件名・見出し・本文をリッチテキストエディタで編集できます。プレビュー機能で送信前に表示を確認することも可能です。
-
-= 無料ですか？ =
-
-はい。上記で紹介している機能は無料でご利用いただけます。
-
-= 不具合や要望はどこに報告すればよいですか？ =
-
-不具合の報告・機能のご要望は、公式サイトのお問い合わせページよりお寄せください。
-
-[https://megurio.jp/question/](https://megurio.jp/question/)
-
-皆さまのフィードバックをお待ちしております。
-
-== 変更履歴 ==
-
-= 0.9.3 =
-
-**新機能**
-
-* 商品詳細ページの定期購入案内に、初回のみ請求される初期費用（Sign-up Fee）を表示するようにしました。
-* 管理画面の定期購入一覧に、キャンセル済み件数の集計カードを追加しました。
-* 管理画面の定期購入一覧に、各定期購入の金額（Total）列を追加しました。
-* スクリーンショット項目を追加しました。
-
-**不具合修正・改善**
-
-* HPOS 有効環境で、保存済み決済トークンが存在しているにもかかわらず「Apple Pay / Google Pay などのエクスプレス決済」と誤判定される問題を修正しました。
-* 定期購入・更新注文のメタデータ読み書きを WooCommerce Order CRUD API に統一しました。
-* 商品側の定期購入設定メタも WooCommerce Product CRUD API 経由で読み書きするようにしました。
-* 商品一覧・商品詳細の定期購入案内 HTML を共通化し、初期費用が設定されている場合は同じ形式で表示されるようにしました。
-* 初期費用表示に合わせて、商品詳細ページの定期購入案内スタイルを調整しました。
-* マイアカウントの定期購入詳細ページから、顧客向けには不要な状態遷移履歴の表示を削除しました。
-* WordPress.org の FAQ 表示に対応するため、FAQ セクションを標準形式に修正しました。
-* readme.txt の一部の日本語表現を修正しました。
-
-全バージョンの変更履歴は GitHub リリースページをご覧ください。
-
-[GitHub リリースページ](https://github.com/megurio/megurio-subscriptions-for-woocommerce/releases)
+https://github.com/megurio/megurio-subscriptions-for-woocommerce/releases

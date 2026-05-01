@@ -688,7 +688,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 								?>
 							<tr>
 								<td>#<?php echo esc_html( $subscription_id ); ?></td>
-								<td><?php echo wp_kses_post( $this->render_status_badge( $status ) ); ?></td>
+								<td><?php echo wp_kses_post( $this->render_status_badge( $status, $subscription_id ) ); ?></td>
 								<td>
 									<?php if ( $product_id ) : ?>
 										<a href="<?php echo esc_url( get_edit_post_link( $product_id ) ); ?>"><?php echo esc_html( $product_title ); ?></a>
@@ -755,7 +755,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 					<div class="megurio-admin-meta">
 						<div>
 							<strong><?php esc_html_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-							<?php echo wp_kses_post( $this->render_status_badge( $selected_status ) ); ?>
+							<?php echo wp_kses_post( $this->render_status_badge( $selected_status, $selected_id ) ); ?>
 						</div>
 						<div>
 							<strong><?php esc_html_e( 'Product', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
@@ -920,7 +920,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 					<tr>
 						<td data-title="<?php esc_attr_e( 'Subscription ID', 'megurio-subscriptions-for-woocommerce' ); ?>">#<?php echo esc_html( $subscription_id ); ?></td>
 							<td data-title="<?php esc_attr_e( 'Product', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo esc_html( $product_id ? get_the_title( $product_id ) : '-' ); ?></td>
-								<td data-title="<?php esc_attr_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo wp_kses_post( $this->render_status_badge( $status ) ); ?></td>
+								<td data-title="<?php esc_attr_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo wp_kses_post( $this->render_status_badge( $status, $subscription_id ) ); ?></td>
 							<td data-title="<?php esc_attr_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo esc_html( $this->format_timestamp( $next_payment ) ); ?></td>
 							<td data-title="<?php esc_attr_e( 'Details', 'megurio-subscriptions-for-woocommerce' ); ?>"><a class="button" href="<?php echo esc_url( $detail_url ); ?>"><?php esc_html_e( 'View Details', 'megurio-subscriptions-for-woocommerce' ); ?></a></td>
 					</tr>
@@ -961,7 +961,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				</tr>
 				<tr>
 					<th><?php esc_html_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-					<td><?php echo wp_kses_post( $this->render_status_badge( $status ) ); ?></td>
+					<td><?php echo wp_kses_post( $this->render_status_badge( $status, $subscription_id ) ); ?></td>
 				</tr>
 				<tr>
 					<th><?php esc_html_e( 'Start Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
@@ -3160,10 +3160,11 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	/**
 	 * 状態バッジの HTML を返します。
 	 *
-	 * @param string $status 状態名。
+	 * @param string $status          状態名。
+	 * @param int    $subscription_id 定期購入 ID。
 	 * @return string
 	 */
-	protected function render_status_badge( $status ) {
+	protected function render_status_badge( $status, $subscription_id = 0 ) {
 		$map = array(
 			'pending'   => array( 'status-pending', __( 'Pending', 'megurio-subscriptions-for-woocommerce' ) ),
 			'active'    => array( 'status-processing', __( 'Active', 'megurio-subscriptions-for-woocommerce' ) ),
@@ -3172,6 +3173,17 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		);
 
 		$badge = isset( $map[ $status ] ) ? $map[ $status ] : array( 'status-pending', $status ? $status : '-' );
+		if ( $subscription_id && 'active' === $status ) {
+			$runtime_status = $this->get_subscription_runtime_status( $subscription_id );
+			if ( ! empty( $runtime_status['is_grace_period'] ) ) {
+				$badge[1] = sprintf(
+					/* translators: 1: subscription status label, 2: retrying payment label */
+					__( '%1$s (%2$s)', 'megurio-subscriptions-for-woocommerce' ),
+					$badge[1],
+					__( 'Payment failed - retrying', 'megurio-subscriptions-for-woocommerce' )
+				);
+			}
+		}
 
 		return '<mark class="order-status ' . esc_attr( $badge[0] ) . '"><span>' . esc_html( $badge[1] ) . '</span></mark>';
 	}
