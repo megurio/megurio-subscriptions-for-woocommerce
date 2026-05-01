@@ -60,6 +60,12 @@ msgstr "全定期購入件数"
 msgid "Active"
 msgstr "有効"
 
+msgid "%1$s (%2$s)"
+msgstr "%1$s（%2$s）"
+
+msgid "Payment failed - retrying"
+msgstr "支払い失敗・再試行中"
+
 msgid "On Hold"
 msgstr "一時停止"
 
