@@ -1,4 +1,4 @@
-=== Megurio 定期購入 for WooCommerce ===
+=== Megurio Subscriptions for WooCommerce ===
 Contributors: wapai222
 Tags: subscriptions, recurring payments, woocommerce subscriptions, stripe, woocommerce payments
 Requires at least: 6.5
@@ -6,7 +6,7 @@ Tested up to: 6.9
 Requires PHP: 8.1
 WC requires at least: 8.2
 WC tested up to: 10.6.2
-Stable tag: 0.9.5
+Stable tag: 0.9.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,25 +27,8 @@ Key features include:
 * Admin subscription list, status tracking, and editable notification email templates
 * HPOS support for WooCommerce custom order tables
 
-For detailed usage, setup instructions, and support information, please visit the official website.
-
-https://megurio.jp/
-
-== Changelog ==
-
-= 0.9.5 =
-
-**New Features**
-
-* Added a clearer retry-state label for active subscriptions after a renewal payment failure.
-* Simplified the WordPress.org readme into a concise English overview with key features and official links.
-* Updated the plugin version and readme stable tag to 0.9.5.
-
-**Bug Fixes**
-
-* Improved the status display so subscriptions in the renewal retry grace period can be distinguished from normal active subscriptions.
-* Updated and regenerated the Japanese translation files for the new retry-state label.
+For detailed usage, setup instructions, and support information, please visit the [official website](https://megurio.jp/).
 
 For the full changelog of all versions, please see the GitHub releases page.
 
-https://github.com/megurio/megurio-subscriptions-for-woocommerce/releases
+[GitHub releases page](https://github.com/megurio/megurio-subscriptions-for-woocommerce/releases)
