@@ -203,8 +203,14 @@ msgstr "定期購入種別"
 msgid "Please enable Stripe or WooPayments card payment for subscription products."
 msgstr "定期購入商品のお支払いには Stripe または WooPayments のカード決済を有効化してください。"
 
+msgid "Please enable Stripe card payment for subscription products."
+msgstr "定期購入商品のお支払いには Stripe のカード決済を有効化してください。"
+
 msgid "Only Stripe or WooPayments card payment is available for subscriptions."
 msgstr "定期購入では Stripe または WooPayments のカード決済のみご利用いただけます。"
+
+msgid "Only Stripe card payment is available for subscriptions."
+msgstr "定期購入では Stripe のカード決済のみご利用いただけます。"
 
 msgid "Only card payment is available for subscriptions. Please enter your card information."
 msgstr "定期購入ではカード決済のみご利用いただけます。カード情報を入力してお支払いください。"
@@ -214,6 +220,21 @@ msgstr "※ Apple Pay・Google Pay は定期購入の自動更新に対応して
 
 msgid "Only Stripe or WooPayments card payment is supported for subscriptions."
 msgstr "定期購入では Stripe または WooPayments のカード決済のみサポートされています。"
+
+msgid "Only Stripe card payment is supported for subscriptions."
+msgstr "定期購入では Stripe のカード決済のみサポートされています。"
+
+msgid "Automatic Stripe renewal payment failed because the saved Stripe customer or payment method is missing."
+msgstr "保存済みの Stripe 顧客情報または支払い方法が見つからないため、自動更新決済に失敗しました。"
+
+msgid "Starting Stripe off-session automatic renewal payment using the saved payment method."
+msgstr "保存済みの支払い方法を使用して Stripe 自動更新決済を開始しました。"
+
+msgid "Automatic Stripe renewal payment failed: %s"
+msgstr "Stripe 自動更新決済に失敗しました: %s"
+
+msgid "Automatic renewal payment failed because no payment gateway handler is registered for %1$s (%2$s)."
+msgstr "%1$s の自動更新決済を処理するゲートウェイハンドラーが登録されていないため、決済に失敗しました（%2$s）。"
 
 msgid "Check to treat this product as a subscription product."
 msgstr "チェックすると、この商品を定期購入商品として扱います。"
@@ -342,6 +363,9 @@ msgstr "この更新注文は定期購入 #%d に紐づいています。"
 #. translators: %s: payment method ID
 msgid "Payment method %s is not supported for subscriptions and has been paused. Please change to Stripe or WooPayments card payment."
 msgstr "支払い方法 %s は定期購入でサポートされていないため、一時停止しました。Stripe または WooPayments のカード決済へ変更してください。"
+
+msgid "Payment method %s is not supported for subscriptions and has been paused. Please change to Stripe card payment."
+msgstr "支払い方法 %s は定期購入でサポートされていないため、一時停止しました。Stripe のカード決済へ変更してください。"
 
 msgid "Normal"
 msgstr "通常稼働"

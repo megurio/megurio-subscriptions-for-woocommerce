@@ -98,7 +98,6 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_front_assets' ) );
 
 		// サブスク購入時に各ゲートウェイの「カードを保存」フラグを強制的に立てる。
-		// WCPay: wc-woocommerce_payments-new-payment-method
 		// Stripe: wc-stripe-new-payment-method
 		// これにより setup_future_usage: off_session で PaymentIntent が作成され、
 		// 初回 3DS 認証が MIT 免除として登録されるため、更新時の再認証を回避できる。
@@ -1250,7 +1249,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	}
 
 	/**
-	 * 定期購入商品購入時の支払い方法を Stripe / WooPayments のカード決済に制限します。
+	 * 定期購入商品購入時の支払い方法を Stripe 公式プラグインのカード決済に制限します。
 	 *
 	 * @param array $available_gateways 利用可能な決済ゲートウェイ。
 	 * @return array
@@ -1265,10 +1264,10 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		// 定期購入で使用できるゲートウェイ。
-		// 自動更新に使える保存済みカードを作成できるゲートウェイのみ許可する。
+		// 自動更新に使える保存済み Stripe カードを作成できるゲートウェイのみ許可する。
 		// ─────────────────────────────────────────────────────────────────
 		// 自動課金対応ゲートウェイは Megurio_Payment_Gateway_Integration::AUTO_CHARGE_GATEWAYS
-		// で管理しています。将来 Stripe・PayPal を追加する場合はそちらに ID を追記してください。
+		// で管理しています。現在は Stripe 公式プラグインのみ許可します。
 		// ─────────────────────────────────────────────────────────────────
 		$allowed_gateways = Megurio_Payment_Gateway_Integration::AUTO_CHARGE_GATEWAYS;
 
@@ -1282,22 +1281,15 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return $available_gateways;
 		}
 
-		if ( function_exists( 'wc_has_notice' ) && ! wc_has_notice( __( 'Please enable Stripe or WooPayments card payment for subscription products.', 'megurio-subscriptions-for-woocommerce' ), 'error' ) ) {
-			wc_add_notice( __( 'Please enable Stripe or WooPayments card payment for subscription products.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
+		if ( function_exists( 'wc_has_notice' ) && ! wc_has_notice( __( 'Please enable Stripe card payment for subscription products.', 'megurio-subscriptions-for-woocommerce' ), 'error' ) ) {
+			wc_add_notice( __( 'Please enable Stripe card payment for subscription products.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
 		}
 
 		return array();
 	}
 
 	/**
-	 * 定期購入を含む注文で WCPay の「カードを保存」フラグを強制的に立てます。
-	 *
-	 * WCPay はこのフラグが立っているとき Stripe PaymentIntent に
-	 * setup_future_usage: 'off_session' を付与します。
-	 * これにより初回 3DS 認証が将来のオフセッション課金（自動更新）の
-	 * MIT 免除として銀行に登録され、更新時の 3DS 再認証を回避できます。
-	 *
-	 * WCPay の POST キー: wc-{gateway_id}-new-payment-method
+	 * 定期購入を含む注文で Stripe の「カードを保存」フラグを強制的に立てます。
 	 *
 	 * @return void
 	 */
@@ -1315,7 +1307,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
-		// WCPay が読み取る「カードを保存する」POST フラグを強制的にセットする。
+		// Stripe が読み取る「カードを保存する」POST フラグを強制的にセットする。
 		$_POST[ 'wc-' . $gateway_id . '-new-payment-method' ] = '1';
 	}
 
@@ -1516,7 +1508,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		$gateway_id = $this->get_posted_scalar_value( 'payment_method' );
 		if ( ! in_array( $gateway_id, Megurio_Payment_Gateway_Integration::AUTO_CHARGE_GATEWAYS, true ) ) {
-			wc_add_notice( __( 'Only Stripe or WooPayments card payment is available for subscriptions.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
+			wc_add_notice( __( 'Only Stripe card payment is available for subscriptions.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
 			return;
 		}
 
@@ -1581,7 +1573,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			'megurio-front',
 			'megurio_params',
 			array(
-				'is_subscription_context' => $is_subscription_product || $this->cart_has_subscription_product(),
+				'is_subscription_context' => is_product() ? $is_subscription_product : $this->cart_has_subscription_product(),
 				'express_notice_text'     => __( '* Apple Pay and Google Pay do not support automatic renewal for subscriptions. Please enter your card information directly.', 'megurio-subscriptions-for-woocommerce' ),
 			)
 		);
@@ -2234,7 +2226,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$retry_count = (int) $renewal_order->get_meta( '_megurio_retry_count', true );
 
 		// 再試行のため注文を保留中にリセットする。
-		// これにより WCPay が再度課金を試みられる状態になる。
+		// これにより自動決済処理が再度課金を試みられる状態になる。
 		$renewal_order->set_status( 'pending' );
 		$renewal_order->add_order_note( sprintf(
 			/* translators: 1: current retry count, 2: max retries */
@@ -2323,7 +2315,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		if ( $subscription instanceof WC_Order ) {
 			$subscription->add_order_note( sprintf(
 				/* translators: %s: payment method ID */
-				__( 'Payment method %s is not supported for subscriptions and has been paused. Please change to Stripe or WooPayments card payment.', 'megurio-subscriptions-for-woocommerce' ),
+				__( 'Payment method %s is not supported for subscriptions and has been paused. Please change to Stripe card payment.', 'megurio-subscriptions-for-woocommerce' ),
 				$payment_method ? $payment_method : '-'
 			) );
 		}
