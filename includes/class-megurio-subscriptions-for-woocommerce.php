@@ -77,7 +77,6 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		add_filter( 'woocommerce_account_menu_items', array( $this, 'add_my_account_menu_item' ) );
 		add_action( 'woocommerce_account_megurio-subscriptions_endpoint', array( $this, 'render_my_account_page' ) );
 		add_action( 'woocommerce_after_shop_loop_item_title', array( $this, 'render_archive_subscription_notice' ), 15 );
-		add_action( 'woocommerce_single_product_summary', array( $this, 'render_single_subscription_notice' ), 11 );
 		add_filter( 'woocommerce_get_price_html', array( $this, 'append_price_interval_suffix' ), 10, 2 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'add_cart_subscription_item_data' ), 10, 2 );
 		add_action( 'woocommerce_cart_calculate_fees', array( $this, 'add_signup_fee_to_cart' ) );
@@ -1143,7 +1142,13 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return $price_html;
 		}
 
-		return $price_html . '<span class="megurio-price-interval">' . esc_html( $suffix ) . '</span>';
+		$price_html .= '<span class="megurio-price-interval">' . esc_html( $suffix ) . '</span>';
+
+		if ( is_product() ) {
+			$price_html .= $this->get_price_subscription_details_html( $product_id );
+		}
+
+		return $price_html;
 	}
 
 	/**
@@ -1547,7 +1552,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			'megurio-front',
 			plugins_url( 'assets/css/front.css', dirname( __DIR__ ) . '/megurio-subscriptions-for-woocommerce.php' ),
 			array(),
-			self::PLUGIN_VERSION
+			filemtime( dirname( __DIR__ ) . '/assets/css/front.css' )
 		);
 
 		wp_enqueue_script(
@@ -3038,25 +3043,51 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$signup_fee     = (float) $this->get_product_meta( $this->get_meta_product_id( $product_id ), '_megurio_signup_fee' );
 		$class_attr     = trim( $class );
 		$details        = sprintf(
-			'<div>%1$s: %2$s</div>',
+			'<span>%1$s: %2$s</span>',
 			esc_html__( 'Renewal Interval', 'megurio-subscriptions-for-woocommerce' ),
 			esc_html( $interval_label )
 		);
 
 		if ( $signup_fee > 0 ) {
 			$details .= sprintf(
-				'<div>%1$s: %2$s</div>',
+				'<span>%1$s: %2$s</span>',
 				esc_html__( 'Sign-up Fee', 'megurio-subscriptions-for-woocommerce' ),
 				wp_kses_post( wc_price( $signup_fee ) )
 			);
 		}
 
 		return sprintf(
-			'<div class="%1$s"><strong>%2$s</strong>%3$s</div>',
+			'<div class="%1$s"><strong>%2$s</strong><span class="megurio-subscription-notice-details">%3$s</span></div>',
 			esc_attr( $class_attr ),
 			esc_html__( 'Subscription Product', 'megurio-subscriptions-for-woocommerce' ),
 			$details
 		);
+	}
+
+	/**
+	 * 商品詳細の価格下に表示する定期購入情報 HTML を返します。
+	 *
+	 * @param int $product_id 商品 ID。
+	 * @return string
+	 */
+	protected function get_price_subscription_details_html( $product_id ) {
+		$interval_label = $this->get_subscription_interval_label( $product_id );
+		$signup_fee     = (float) $this->get_product_meta( $this->get_meta_product_id( $product_id ), '_megurio_signup_fee' );
+		$details        = sprintf(
+			'<span>%1$s: %2$s</span>',
+			esc_html__( 'Renewal Interval', 'megurio-subscriptions-for-woocommerce' ),
+			esc_html( $interval_label )
+		);
+
+		if ( $signup_fee > 0 ) {
+			$details .= sprintf(
+				'<span>%1$s: %2$s</span>',
+				esc_html__( 'Sign-up Fee', 'megurio-subscriptions-for-woocommerce' ),
+				wp_kses_post( wc_price( $signup_fee ) )
+			);
+		}
+
+		return '<span class="megurio-price-details">' . $details . '</span>';
 	}
 
 	/**
