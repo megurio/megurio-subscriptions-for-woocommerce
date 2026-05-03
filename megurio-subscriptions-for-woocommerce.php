@@ -1,9 +1,11 @@
 <?php
 /**
  * Plugin Name: Megurio Subscriptions For WooCommerce
+ * Plugin URI: https://megurio.jp/
  * Description: WooCommerce で定期購入（サブスクリプション）商品を簡単に管理できるプラグインです。Stripe 公式決済プラグインによるカード自動課金、更新注文の自動生成、請求管理、プラン設定に対応しています。
- * Version: 0.9.7
+ * Version: 0.9.8
  * Author: megurio
+ * Author URI: https://megurio.jp/
  * Text Domain: megurio-subscriptions-for-woocommerce
  * Domain Path: /languages
  * Requires Plugins: woocommerce
@@ -15,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MEGURIO_SUBSCRIPTIONS_FOR_WOOCOMMERCE_VERSION', '0.9.7' );
+define( 'MEGURIO_SUBSCRIPTIONS_FOR_WOOCOMMERCE_VERSION', '0.9.8' );
 
 /**
  * 必要なクラスを読み込みます。
