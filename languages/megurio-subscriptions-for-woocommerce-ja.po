@@ -658,3 +658,9 @@ msgstr "初期費用"
 
 msgid "One-time fee charged on the first order only. Leave blank or 0 for no sign-up fee."
 msgstr "初回注文時のみ請求される一回限りの費用です。不要な場合は空欄または 0 にしてください。"
+
+msgid "Please create an account or log in before purchasing a subscription. Subscriptions require a customer account for automatic renewal."
+msgstr "定期購入を購入する前に、アカウントを作成するかログインしてください。自動更新には顧客アカウントが必要です。"
+
+msgid "Subscription record was not created because this order has no customer account. Subscriptions require a registered WooCommerce customer for automatic renewal."
+msgstr "この注文には顧客アカウントがないため、定期購入レコードは作成されませんでした。自動更新には登録済みの WooCommerce 顧客が必要です。"

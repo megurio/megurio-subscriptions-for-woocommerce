@@ -22,6 +22,13 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	protected $gateway_integration;
 
 	/**
+	 * Store API checkout で定期購入注文が検出されたかどうか。
+	 *
+	 * @var bool
+	 */
+	protected $subscription_checkout_requires_account = false;
+
+	/**
 	 * 定期購入レコードの注文タイプです。
 	 */
 	const SUBSCRIPTION_TYPE = 'megurio_subscription';
@@ -80,6 +87,10 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		add_filter( 'woocommerce_get_price_html', array( $this, 'append_price_interval_suffix' ), 10, 2 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'add_cart_subscription_item_data' ), 10, 2 );
 		add_action( 'woocommerce_cart_calculate_fees', array( $this, 'add_signup_fee_to_cart' ) );
+		add_filter( 'woocommerce_checkout_registration_enabled', array( $this, 'require_customer_account_for_subscription_checkout' ) );
+		add_filter( 'woocommerce_checkout_registration_required', array( $this, 'require_customer_account_for_subscription_checkout' ) );
+		add_action( 'woocommerce_checkout_create_order', array( $this, 'validate_subscription_checkout_order_customer' ), 20, 2 );
+		add_action( 'woocommerce_store_api_checkout_update_order_from_request', array( $this, 'force_store_api_account_for_subscription_checkout' ), 20, 2 );
 		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'limit_subscription_payment_gateways' ) );
 		add_filter( 'wc_stripe_upe_params', array( $this, 'limit_stripe_upe_to_card_for_subscription' ) );
 		add_filter( 'wc_stripe_generate_create_intent_request', array( $this, 'limit_stripe_intent_to_card_for_subscription' ), 20, 3 );
@@ -1254,6 +1265,58 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	}
 
 	/**
+	 * 定期購入ではゲスト注文を許可せず、チェックアウト時に顧客アカウントを作成します。
+	 *
+	 * 保存済みカードトークンと Stripe Customer ID は WooCommerce の customer ID に紐づくため、
+	 * customer_id=0 の注文から定期購入を作ると更新課金できません。
+	 *
+	 * @param bool $enabled_or_required 既存の WooCommerce 設定値。
+	 * @return bool
+	 */
+	public function require_customer_account_for_subscription_checkout( $enabled_or_required ) {
+		if ( $this->subscription_checkout_requires_account || $this->cart_has_subscription_product() ) {
+			return true;
+		}
+
+		return $enabled_or_required;
+	}
+
+	/**
+	 * Store API / Checkout Blocks では draft order から定期購入を検出し、アカウント作成を強制します。
+	 *
+	 * @param WC_Order        $order   Draft order。
+	 * @param WP_REST_Request $request Checkout request。
+	 * @return void
+	 */
+	public function force_store_api_account_for_subscription_checkout( $order, $request ) {
+		if ( ! $order instanceof WC_Order || ! $this->order_has_subscription_product( $order ) ) {
+			return;
+		}
+
+		$this->subscription_checkout_requires_account = true;
+
+		if ( ! is_user_logged_in() && is_object( $request ) && method_exists( $request, 'set_param' ) ) {
+			$request->set_param( 'create_account', true );
+		}
+	}
+
+	/**
+	 * 注文作成直前の最終防衛線です。定期購入注文が guest のままなら注文処理を止めます。
+	 *
+	 * @param WC_Order $order 注文。
+	 * @param array    $data  Checkout data。
+	 * @throws Exception 定期購入注文に顧客アカウントがない場合。
+	 * @return void
+	 */
+	public function validate_subscription_checkout_order_customer( $order, $data = array() ) {
+		if ( ! $order instanceof WC_Order || ! $this->order_has_subscription_product( $order ) || $order->get_customer_id() ) {
+			return;
+		}
+
+		throw new Exception( __( 'Please create an account or log in before purchasing a subscription. Subscriptions require a customer account for automatic renewal.', 'megurio-subscriptions-for-woocommerce' ) );
+	}
+
+	/**
 	 * 定期購入商品購入時の支払い方法を Stripe 公式プラグインのカード決済に制限します。
 	 *
 	 * @param array $available_gateways 利用可能な決済ゲートウェイ。
@@ -1836,10 +1899,15 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
-			if ( ! empty( $this->get_subscription_ids_by_parent_order( $order_id, array( 'pending', 'active', 'on-hold', 'cancelled' ) ) ) ) {
-				$this->update_object_meta( $order_id, '_megurio_has_subscription', 'yes' );
-				return;
-			}
+		if ( ! empty( $this->get_subscription_ids_by_parent_order( $order_id, array( 'pending', 'active', 'on-hold', 'cancelled' ) ) ) ) {
+			$this->update_object_meta( $order_id, '_megurio_has_subscription', 'yes' );
+			return;
+		}
+
+		if ( ! $order->get_customer_id() && $this->order_has_subscription_product( $order ) ) {
+			$order->add_order_note( __( 'Subscription record was not created because this order has no customer account. Subscriptions require a registered WooCommerce customer for automatic renewal.', 'megurio-subscriptions-for-woocommerce' ) );
+			return;
+		}
 
 		$created = false;
 
@@ -2824,6 +2892,27 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		return $this->is_subscription_payment_context( $order_id );
+	}
+
+	/**
+	 * 注文内に定期購入商品が含まれているかを返します。
+	 *
+	 * @param WC_Order $order 注文。
+	 * @return bool
+	 */
+	protected function order_has_subscription_product( WC_Order $order ) {
+		foreach ( $order->get_items() as $item ) {
+			if ( ! $item instanceof WC_Order_Item_Product ) {
+				continue;
+			}
+
+			$product = $item->get_product();
+			if ( $product && $this->is_subscription_product( $product->get_id() ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
