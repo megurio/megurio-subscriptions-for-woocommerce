@@ -15,6 +15,9 @@ msgstr ""
 msgid "Subscription List"
 msgstr "定期購入一覧"
 
+msgid "Subscription Orders"
+msgstr "定期購入-注文"
+
 msgid "Subscription status updated."
 msgstr "定期購入状態を更新しました。"
 
@@ -87,6 +90,9 @@ msgstr "次回請求日"
 msgid "Last Renewal Order"
 msgstr "最終更新注文"
 
+msgid "Latest Renewal Order"
+msgstr "最新の更新注文"
+
 msgid "Flow"
 msgstr "流れ"
 
@@ -95,6 +101,9 @@ msgstr "まだ定期購入レコードはありません。"
 
 msgid "View Details"
 msgstr "詳細を見る"
+
+msgid "Back to Subscription List"
+msgstr "定期購入一覧へ戻る"
 
 #. translators: %d: subscription ID
 msgid "Subscription #%d Details"
@@ -139,6 +148,46 @@ msgstr "自動作成された更新注文"
 
 msgid "Order ID"
 msgstr "注文 ID"
+
+msgid "Subscription timeline"
+msgstr "定期購入タイムライン"
+
+msgid "Initial order"
+msgstr "初回注文"
+
+#. translators: %d: parent order ID
+msgid "Initial order #%d"
+msgstr "初回注文 #%d"
+
+#. translators: %d: omitted renewal order count
+msgid "%d previous renewals"
+msgstr "過去の更新注文 %d 件"
+
+#. translators: 1: renewal order status, 2: renewal order ID
+msgid "%1$s #%2$d"
+msgstr "%1$s #%2$d"
+
+#. translators: 1: renewal order ID, 2: renewal order status
+msgid "#%1$d / %2$s"
+msgstr "#%1$d / %2$s"
+
+msgid "Next billing"
+msgstr "次回請求"
+
+msgid "Due now"
+msgstr "請求期限到来"
+
+msgid "Retry scheduled"
+msgstr "リトライ予定"
+
+msgid "Awaiting payment"
+msgstr "支払い待ち"
+
+msgid "Scheduled"
+msgstr "予定"
+
+msgid "No billing schedule"
+msgstr "請求予定なし"
 
 msgid "Created Date"
 msgstr "作成日時"
@@ -410,6 +459,44 @@ msgstr "更新注文 #%d の決済が未完了です。"
 
 msgid "Renewal order payment is incomplete."
 msgstr "更新注文の決済が未完了です。"
+
+msgid "Payment recovery flow"
+msgstr "決済復旧フロー"
+
+msgid "Payment failed"
+msgstr "決済失敗"
+
+#. translators: %d: renewal order ID
+msgid "Payment failed #%d"
+msgstr "決済失敗 #%d"
+
+#. translators: %d: retry number
+msgid "Retry %d"
+msgstr "リトライ %d"
+
+msgid "(estimated)"
+msgstr "（目安）"
+
+msgid "Auto-charging paused"
+msgstr "自動課金停止"
+
+msgid "Retries exhausted"
+msgstr "リトライ上限到達"
+
+msgid "Within grace period"
+msgstr "猶予期間中"
+
+msgid "Unpaid renewal order"
+msgstr "未決済の更新注文"
+
+msgid "Retry progress"
+msgstr "リトライ進捗"
+
+msgid "Next retry"
+msgstr "次回リトライ"
+
+msgid "Grace period ends"
+msgstr "猶予期間終了"
 
 msgid "soon"
 msgstr "まもなく"

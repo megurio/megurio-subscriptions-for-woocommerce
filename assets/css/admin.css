@@ -101,6 +101,325 @@
 	margin-bottom: 4px;
 }
 
+.megurio-subscription-overview {
+	--megurio-overview-color: #2271b1;
+	--megurio-overview-soft: #eef6fc;
+	--megurio-overview-text: #1d2327;
+	margin: 14px 0 20px;
+	padding: 20px 24px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left: 4px solid var(--megurio-overview-color);
+	border-radius: 8px;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.megurio-subscription-overview--active {
+	--megurio-overview-color: #00a32a;
+	--megurio-overview-soft: #edfaef;
+}
+
+.megurio-subscription-overview--attention {
+	--megurio-overview-color: #dba617;
+	--megurio-overview-soft: #fcf9e8;
+}
+
+.megurio-subscription-overview--paused {
+	--megurio-overview-color: #d63638;
+	--megurio-overview-soft: #fcf0f1;
+}
+
+.megurio-subscription-overview--cancelled {
+	--megurio-overview-color: #8c8f94;
+	--megurio-overview-soft: #f0f0f1;
+}
+
+.megurio-subscription-overview__top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 20px;
+}
+
+.megurio-subscription-overview__identity {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-width: 0;
+}
+
+.megurio-subscription-overview__icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 44px;
+	width: 44px;
+	height: 44px;
+	color: var(--megurio-overview-color);
+	background: var(--megurio-overview-soft);
+	border-radius: 8px;
+}
+
+.megurio-subscription-overview__icon .dashicons {
+	width: 22px;
+	height: 22px;
+	font-size: 22px;
+}
+
+.megurio-subscription-overview h3 {
+	margin: 0 0 6px;
+	color: var(--megurio-overview-text);
+	font-size: 16px;
+	line-height: 1.35;
+}
+
+.megurio-subscription-overview__price {
+	color: #2271b1;
+	font-size: 18px;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.megurio-subscription-overview__interval {
+	margin-left: 6px;
+	color: #646970;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.megurio-subscription-overview__status {
+	text-align: right;
+	max-width: 360px;
+}
+
+.megurio-overview-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 6px 12px;
+	color: #1d2327;
+	background: var(--megurio-overview-soft);
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.megurio-overview-pill span {
+	width: 7px;
+	height: 7px;
+	background: var(--megurio-overview-color);
+	border-radius: 50%;
+}
+
+.megurio-subscription-overview__status p {
+	margin: 8px 0 0;
+	color: #646970;
+	line-height: 1.45;
+}
+
+.megurio-subscription-timeline {
+	display: grid;
+	grid-template-columns: repeat(6, minmax(86px, 1fr));
+	gap: 8px;
+	margin: 24px 0 18px;
+}
+
+.megurio-subscription-timeline__item {
+	min-width: 0;
+}
+
+.megurio-subscription-timeline__label,
+.megurio-subscription-timeline__caption {
+	overflow-wrap: anywhere;
+	text-align: center;
+	line-height: 1.35;
+}
+
+.megurio-subscription-timeline__label {
+	margin-bottom: 8px;
+	color: #50575e;
+	font-size: 12px;
+}
+
+.megurio-subscription-timeline__bar {
+	height: 6px;
+	background: #dcdcde;
+	border-radius: 999px;
+}
+
+.megurio-subscription-timeline__caption {
+	margin-top: 8px;
+	color: #646970;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.megurio-subscription-timeline__caption a {
+	color: inherit;
+	text-decoration: none;
+}
+
+.megurio-subscription-timeline__caption a:hover,
+.megurio-subscription-timeline__caption a:focus {
+	color: #135e96;
+	text-decoration: underline;
+}
+
+.megurio-subscription-timeline__item--paid .megurio-subscription-timeline__bar {
+	background: #00a32a;
+}
+
+.megurio-subscription-timeline__item--paid .megurio-subscription-timeline__caption {
+	color: #008a20;
+}
+
+.megurio-subscription-timeline__item--next .megurio-subscription-timeline__bar {
+	background: #2271b1;
+}
+
+.megurio-subscription-timeline__item--next .megurio-subscription-timeline__caption {
+	color: #135e96;
+}
+
+.megurio-subscription-timeline__item--attention .megurio-subscription-timeline__bar {
+	background: #dba617;
+}
+
+.megurio-subscription-timeline__item--attention .megurio-subscription-timeline__caption {
+	color: #996800;
+}
+
+.megurio-subscription-timeline__item--cancelled .megurio-subscription-timeline__bar {
+	background: #d63638;
+}
+
+.megurio-subscription-timeline__item--cancelled .megurio-subscription-timeline__caption {
+	color: #b32d2e;
+}
+
+.megurio-subscription-timeline__item--pending .megurio-subscription-timeline__bar {
+	background: #72aee6;
+}
+
+.megurio-payment-recovery {
+	margin: 18px 0;
+	padding: 16px;
+	background: #fff8e5;
+	border: 1px solid #f0c36d;
+	border-radius: 6px;
+}
+
+.megurio-payment-recovery__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	color: #3c434a;
+}
+
+.megurio-payment-recovery__header strong {
+	font-size: 14px;
+}
+
+.megurio-payment-recovery__header span {
+	padding: 4px 9px;
+	color: #6c4600;
+	background: #f7e0a3;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.megurio-payment-recovery__steps {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(92px, 1fr));
+	gap: 8px;
+	margin: 16px 0;
+}
+
+.megurio-payment-recovery__step {
+	min-width: 0;
+	text-align: center;
+}
+
+.megurio-payment-recovery__dot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	color: #646970;
+	background: #fff;
+	border: 2px solid #dcdcde;
+	border-radius: 50%;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.megurio-payment-recovery__line {
+	height: 5px;
+	margin: 9px 0 8px;
+	background: #dcdcde;
+	border-radius: 999px;
+}
+
+.megurio-payment-recovery__label {
+	color: #646970;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+}
+
+.megurio-payment-recovery__label a {
+	color: inherit;
+	text-decoration: none;
+}
+
+.megurio-payment-recovery__label a:hover,
+.megurio-payment-recovery__label a:focus {
+	color: #135e96;
+	text-decoration: underline;
+}
+
+.megurio-payment-recovery__step--done .megurio-payment-recovery__dot,
+.megurio-payment-recovery__step--done .megurio-payment-recovery__line {
+	color: #fff;
+	background: #dba617;
+	border-color: #dba617;
+}
+
+.megurio-payment-recovery__step--current .megurio-payment-recovery__dot {
+	color: #fff;
+	background: #b26200;
+	border-color: #b26200;
+}
+
+.megurio-payment-recovery__step--current .megurio-payment-recovery__line {
+	background: #dba617;
+}
+
+.megurio-payment-recovery__step--current .megurio-payment-recovery__label {
+	color: #6c4600;
+}
+
+.megurio-subscription-overview__bottom {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(160px, 1fr));
+	gap: 12px;
+	padding-top: 16px;
+	border-top: 1px solid #f0f0f1;
+	color: #3c434a;
+}
+
+.megurio-subscription-overview__bottom strong {
+	display: block;
+	margin-bottom: 4px;
+	color: #646970;
+	font-size: 12px;
+}
+
 .megurio-admin-subtable {
 	width: 100%;
 	border-collapse: collapse;
@@ -117,4 +436,41 @@
 
 .megurio-admin-subtable th {
 	background: #f6f7f7;
+}
+
+@media screen and (max-width: 782px) {
+	.megurio-subscription-overview {
+		padding: 16px;
+	}
+
+	.megurio-subscription-overview__top {
+		display: block;
+	}
+
+	.megurio-subscription-overview__status {
+		margin-top: 16px;
+		text-align: left;
+		max-width: none;
+	}
+
+	.megurio-subscription-timeline {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.megurio-payment-recovery__header {
+		display: block;
+	}
+
+	.megurio-payment-recovery__header span {
+		display: inline-block;
+		margin-top: 8px;
+	}
+
+	.megurio-payment-recovery__steps {
+		grid-template-columns: 1fr;
+	}
+
+	.megurio-subscription-overview__bottom {
+		grid-template-columns: 1fr;
+	}
 }
