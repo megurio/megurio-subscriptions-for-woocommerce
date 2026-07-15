@@ -2,11 +2,11 @@
 Contributors: wapai222
 Tags: subscriptions, recurring payments, woocommerce subscriptions, stripe
 Requires at least: 6.5
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 8.1
 WC requires at least: 8.2
 WC tested up to: 10.6.2
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -32,3 +32,12 @@ For detailed usage, setup instructions, and support information, please visit th
 For the full changelog of all versions, please see the GitHub releases page.
 
 [GitHub releases page](https://github.com/megurio/megurio-subscriptions-for-woocommerce/releases)
+
+== Changelog ==
+
+= 1.0.1 =
+* Translated readme.txt to English.
+* Bumped "Tested up to" to WordPress 7.0.
+
+= 1.0.0 =
+* Initial stable release.
