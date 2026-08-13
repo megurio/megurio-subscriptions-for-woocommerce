@@ -7,8 +7,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * ゲートウェイ連携：更新注文の自動決済を処理します。
  *
- * 現在サポート済み:
- *   - Stripe for WooCommerce (stripe)             — Stripe 公式プラグイン カード決済
+	 * 現在サポート済み:
+	 *   - Stripe for WooCommerce (stripe)             — Stripe 公式プラグイン カード決済
+	 *   - WooCommerce Bank Transfer (bacs)            — 銀行振込による手動更新
  *
  * == 自動課金の共通動作要件 ==
  * 各ゲートウェイは `woocommerce_scheduled_subscription_payment_{gateway_id}` アクションを
@@ -33,6 +34,13 @@ if ( ! class_exists( 'Megurio_Payment_Gateway_Integration' ) ) {
 		);
 
 		/**
+		 * 手動更新に対応しているゲートウェイ ID の一覧。
+		 */
+		const MANUAL_RENEWAL_GATEWAYS = array(
+			'bacs', // WooCommerce 標準の銀行振込。
+		);
+
+		/**
 		 * 指定のゲートウェイが自動課金をサポートしているか返します。
 		 *
 		 * @param string $gateway_id ゲートウェイ ID。
@@ -40,6 +48,44 @@ if ( ! class_exists( 'Megurio_Payment_Gateway_Integration' ) ) {
 		 */
 		public function is_auto_charge_gateway( $gateway_id ) {
 			return in_array( $gateway_id, self::AUTO_CHARGE_GATEWAYS, true );
+		}
+
+		/**
+		 * 指定のゲートウェイが手動更新をサポートしているか返します。
+		 *
+		 * @param string $gateway_id ゲートウェイ ID。
+		 * @return bool
+		 */
+		public function is_manual_renewal_gateway( $gateway_id ) {
+			return in_array( $gateway_id, self::MANUAL_RENEWAL_GATEWAYS, true );
+		}
+
+		/**
+		 * 指定のゲートウェイが定期購入で利用できるか返します。
+		 *
+		 * @param string $gateway_id ゲートウェイ ID。
+		 * @return bool
+		 */
+		public function is_subscription_gateway( $gateway_id ) {
+			return $this->is_auto_charge_gateway( $gateway_id ) || $this->is_manual_renewal_gateway( $gateway_id );
+		}
+
+		/**
+		 * 定期購入の回収方式を返します。
+		 *
+		 * @param string $gateway_id ゲートウェイ ID。
+		 * @return string automatic|manual|unsupported
+		 */
+		public function get_collection_method( $gateway_id ) {
+			if ( $this->is_auto_charge_gateway( $gateway_id ) ) {
+				return 'automatic';
+			}
+
+			if ( $this->is_manual_renewal_gateway( $gateway_id ) ) {
+				return 'manual';
+			}
+
+			return 'unsupported';
 		}
 
 		/**
@@ -255,8 +301,14 @@ if ( ! class_exists( 'Megurio_Payment_Gateway_Integration' ) ) {
 		public function process_renewal_payment( $subscription_id, WC_Order $renewal_order ) {
 			$gateway_id = $renewal_order->get_payment_method();
 
+			// 銀行振込は自動課金しない。on-hold への遷移は呼び出し側で行い、
+			// WooCommerce 標準の BACS 案内メールと管理者による入金確認を利用する。
+			if ( $this->is_manual_renewal_gateway( $gateway_id ) ) {
+				return;
+			}
+
 			if ( ! $this->is_auto_charge_gateway( $gateway_id ) ) {
-				$renewal_order->update_status( 'failed', __( 'Only Stripe card payment is supported for subscriptions.', 'megurio-subscriptions-for-woocommerce' ) );
+				$renewal_order->update_status( 'failed', __( 'This payment method is not supported for subscriptions.', 'megurio-subscriptions-for-woocommerce' ) );
 				return;
 			}
 

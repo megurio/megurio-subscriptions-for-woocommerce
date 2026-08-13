@@ -3,7 +3,8 @@ document.addEventListener('submit', function (event) {
 	if (!event.target.matches('.megurio-cancel-subscription-form')) {
 		return;
 	}
-	if (!window.confirm('この定期購入をキャンセルします。よろしいですか？')) {
+	var message = event.target.getAttribute('data-confirm') || 'Cancelling this subscription is final and cannot be undone. Do you want to continue?';
+	if (!window.confirm(message)) {
 		event.preventDefault();
 	}
 });

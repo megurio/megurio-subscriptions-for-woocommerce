@@ -16,7 +16,7 @@ msgid "Subscription List"
 msgstr "定期購入一覧"
 
 msgid "Subscription Orders"
-msgstr "定期購入-注文"
+msgstr "定期購入管理"
 
 msgid "Subscription status updated."
 msgstr "定期購入状態を更新しました。"
@@ -68,7 +68,7 @@ msgid "Total Subscriptions"
 msgstr "全定期購入件数"
 
 msgid "Active"
-msgstr "有効"
+msgstr "利用中"
 
 msgid "%1$s (%2$s)"
 msgstr "%1$s（%2$s）"
@@ -77,7 +77,7 @@ msgid "Payment failed - retrying"
 msgstr "支払い失敗・再試行中"
 
 msgid "On Hold"
-msgstr "一時停止"
+msgstr "一時停止中"
 
 msgid "Subscription ID"
 msgstr "定期購入 ID"
@@ -142,10 +142,10 @@ msgid "Manually Change Status"
 msgstr "状態を手動変更"
 
 msgid "Pending"
-msgstr "保留"
+msgstr "開始待ち"
 
 msgid "Cancelled"
-msgstr "キャンセル"
+msgstr "解約済み"
 
 msgid "Update Status"
 msgstr "状態を更新"
@@ -202,11 +202,33 @@ msgstr "作成日時"
 msgid "Total"
 msgstr "合計"
 
+msgid "Renewal Amount"
+msgstr "更新時の請求額"
+
+msgid "Action"
+msgstr "確認・操作"
+
+msgid "Not created yet"
+msgstr "まだありません"
+
+msgid "Review Subscription"
+msgstr "確認・操作する"
+
 msgid "No renewal orders have been created yet."
 msgstr "まだ自動作成された更新注文はありません。"
 
 msgid "Status History Notes"
 msgstr "状態遷移メモ"
+
+msgid "Renewal Order History"
+msgstr "更新注文履歴"
+
+msgid "Action and Payment History"
+msgstr "操作・支払い履歴"
+
+#. translators: %d: history entry count
+msgid "View Action and Payment History (%d entries)"
+msgstr "操作・支払い履歴を表示（%d 件）"
 
 msgid "No notes yet."
 msgstr "まだメモはありません。"
@@ -233,7 +255,13 @@ msgid "Manage Subscription"
 msgstr "ご利用中のお手続き"
 
 msgid "Cancel This Subscription"
-msgstr "この定期購入をキャンセルする"
+msgstr "定期購入を解約する"
+
+msgid "Cancelling this subscription is final and cannot be undone. Do you want to continue?"
+msgstr "この定期購入を解約すると元に戻せません。解約を続けますか？"
+
+msgid "Cancellation is final and cannot be undone."
+msgstr "解約すると元に戻せません。"
 
 msgid "Renewal Orders"
 msgstr "更新注文"
@@ -527,6 +555,46 @@ msgstr "管理画面から定期購入状態を %s に変更しました。"
 msgid "This page shows all subscription records and status flows created by the subscription plugin."
 msgstr "このページでは、定期購入プラグインが作成した定期購入レコードと状態の流れをまとめて確認できます。"
 
+msgid "Review subscription status, upcoming billing, and renewal orders. Subscriptions requiring attention are shown first."
+msgstr "定期購入の現在状態、次回請求、更新注文を確認できます。確認が必要な状態から順に表示します。"
+
+msgid "Subscription Actions"
+msgstr "定期購入の操作"
+
+msgid "Start Subscription"
+msgstr "定期購入を開始"
+
+msgid "Resume Subscription"
+msgstr "定期購入を再開"
+
+msgid "Pause Subscription"
+msgstr "定期購入を一時停止"
+
+msgid "Cancel Subscription"
+msgstr "定期購入を解約"
+
+msgid "Confirm the initial order and begin scheduled billing."
+msgstr "初回注文を確認済みにし、予定どおり請求を開始します。"
+
+msgid "Resume scheduled billing from the next billing date."
+msgstr "次回請求日から予定どおりの請求を再開します。"
+
+msgid "Stop automatic billing temporarily. The subscription can be resumed later."
+msgstr "自動請求を一時的に止めます。あとで再開できます。"
+
+msgid "End all future billing. This action cannot be undone."
+msgstr "今後の請求を終了します。元に戻せません。"
+
+msgid "This will end all future billing and cannot be undone. Cancel this subscription?"
+msgstr "今後の請求を終了します。この操作は元に戻せません。定期購入を解約しますか？"
+
+msgid "This subscription is already cancelled. No further billing will occur, and it cannot be reopened."
+msgstr "この定期購入は解約済みです。今後の請求は行われず、再開もできません。"
+
+#. translators: %d: renewal order ID
+msgid "Subscription paused until bank transfer for renewal order #%d is confirmed."
+msgstr "更新注文 #%d の銀行振込を確認するまで、定期購入を一時停止しています。"
+
 msgid "System"
 msgstr "システム"
 
@@ -700,13 +768,16 @@ msgid "Please contact us if you have any questions."
 msgstr "ご不明な点がございましたら、お気軽にお問い合わせください。"
 
 msgid "Pause This Subscription"
-msgstr "定期購入を一時停止する"
+msgstr "一時停止する"
 
 msgid "Resume This Subscription"
-msgstr "定期購入を再開する"
+msgstr "再開する"
 
 msgid "This subscription cannot be paused at this time."
 msgstr "現在、この定期購入を一時停止できません。"
+
+msgid "This subscription cannot be paused while a renewal payment is pending. Resolve the payment or cancel the subscription instead."
+msgstr "更新決済の処理中は定期購入を一時停止できません。決済を解決するか、定期購入をキャンセルしてください。"
 
 msgid "This subscription cannot be resumed at this time."
 msgstr "現在、この定期購入を再開できません。"
@@ -758,3 +829,108 @@ msgstr "定期購入を購入する前に、アカウントを作成するかロ
 
 msgid "Subscription record was not created because this order has no customer account. Subscriptions require a registered WooCommerce customer for automatic renewal."
 msgstr "この注文には顧客アカウントがないため、定期購入レコードは作成されませんでした。自動更新には登録済みの WooCommerce 顧客が必要です。"
+
+msgid "Subscription status was not changed. Resolve the unpaid renewal order before reactivating it."
+msgstr "定期購入の状態は変更されませんでした。再開する前に、未払いの更新注文を入金確認またはキャンセルしてください。"
+
+msgid "Payment for renewal order #%d was received after cancellation. The subscription remains cancelled."
+msgstr "キャンセル後に更新注文 #%d の入金を確認しました。定期購入はキャンセル状態のままです。"
+
+msgid "The linked subscription was already cancelled, so this payment did not reactivate it."
+msgstr "関連する定期購入はすでにキャンセル済みのため、この入金では再開されませんでした。"
+
+msgid "Admin reactivation was blocked because an unpaid renewal order still exists. Confirm or cancel that order first."
+msgstr "未払いの更新注文が残っているため、管理画面からの再開を停止しました。先にその注文の入金確認またはキャンセルを行ってください。"
+
+msgid "Payment for superseded renewal order #%1$d was recorded, but the current schedule remains based on renewal order #%2$d."
+msgstr "旧更新注文 #%1$d の入金を記録しましたが、現在の請求予定は最新の更新注文 #%2$d を基準としたままです。"
+
+msgid "This is an older renewal order. Payment was recorded, but it did not change the current subscription schedule (latest renewal #%d)."
+msgstr "これは古い更新注文です。入金は記録しましたが、現在の定期購入予定（最新更新注文 #%d）は変更していません。"
+
+msgid "Cancelled is a final status and cannot be reopened."
+msgstr "解約済みは最終状態のため、再開できません。"
+
+msgid "Rejected invalid subscription status transition: %1$s to %2$s."
+msgstr "許可されていない定期購入状態の変更を拒否しました：%1$s から %2$s。"
+
+msgid "Renewal order #%d was fully refunded. Subscription is on hold until an administrator resumes or cancels it."
+msgstr "更新注文 #%d は全額返金されました。管理者が再開またはキャンセルを判断するまで定期購入を保留します。"
+
+msgid "Closed"
+msgstr "注文取消済み"
+
+msgid "Awaiting Payment"
+msgstr "入金待ち"
+
+msgid "Bank transfer not yet confirmed"
+msgstr "銀行振込の入金未確認"
+
+msgid "Online payment is incomplete"
+msgstr "オンライン決済未完了"
+
+msgid "Bank transfer awaiting confirmation"
+msgstr "銀行振込の入金確認待ち"
+
+msgid "Payment is awaiting review"
+msgstr "決済確認待ち"
+
+msgid "Paid"
+msgstr "支払い済み"
+
+msgid "Awaiting fulfillment"
+msgstr "発送・提供待ち"
+
+msgid "Fulfillment completed"
+msgstr "発送・提供完了"
+
+msgid "Payment Failed"
+msgstr "決済失敗"
+
+msgid "Payment was not completed"
+msgstr "決済が完了していません"
+
+msgid "No further payment will be collected"
+msgstr "この更新注文はキャンセル済みです"
+
+msgid "Refunded"
+msgstr "返金済み"
+
+msgid "Refund recorded"
+msgstr "返金処理済み"
+
+msgid "Paused by the customer."
+msgstr "顧客が一時停止しました。"
+
+msgid "The customer can resume this subscription from My Account."
+msgstr "顧客はマイアカウントからこの定期購入を再開できます。"
+
+msgid "Paused by an administrator."
+msgstr "管理者が一時停止しました。"
+
+msgid "Only an administrator can resume this subscription."
+msgstr "この定期購入を再開できるのは管理者だけです。"
+
+msgid "Waiting for the next automatic payment retry."
+msgstr "次回の自動決済リトライ待ちです。"
+
+msgid "The customer cannot manually resume while a payment retry is pending."
+msgstr "決済リトライ待ちの間、顧客は手動で再開できません。"
+
+msgid "Automatic payment retries were exhausted."
+msgstr "自動決済のリトライ上限に達しました。"
+
+msgid "Confirm payment or cancel the unpaid order before resuming."
+msgstr "再開する前に、未払い注文の入金確認またはキャンセルを行ってください。"
+
+msgid "The saved payment method does not support automatic renewal."
+msgstr "保存されている支払い方法は自動更新に対応していません。"
+
+msgid "Change the payment method before resuming."
+msgstr "再開する前に支払い方法を変更してください。"
+
+msgid "The latest renewal order was fully refunded."
+msgstr "最新の更新注文は全額返金されました。"
+
+msgid "An administrator must explicitly resume or cancel this subscription."
+msgstr "管理者がこの定期購入を再開またはキャンセルする必要があります。"
