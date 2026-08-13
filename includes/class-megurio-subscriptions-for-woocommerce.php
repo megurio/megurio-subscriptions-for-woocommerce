@@ -89,6 +89,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		add_action( 'manage_shop_order_posts_custom_column', array( $this, 'render_order_list_column' ), 10, 2 );
 		add_filter( 'woocommerce_shop_order_list_table_columns', array( $this, 'add_order_list_column' ) );
 		add_action( 'woocommerce_shop_order_list_table_custom_column', array( $this, 'render_order_list_column' ), 10, 2 );
+		add_action( 'woocommerce_admin_order_data_after_order_details', array( $this, 'render_order_subscription_reference' ) );
 		add_action( 'admin_menu', array( $this, 'register_admin_menu' ) );
 		add_action( 'admin_init', array( $this, 'handle_admin_actions' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
@@ -580,7 +581,13 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 			echo '<mark class="order-status status-on-hold"><span>' . esc_html__( 'Renewal Order', 'megurio-subscriptions-for-woocommerce' ) . '</span></mark>';
 			if ( $subscription_id ) {
-				echo '<div class="megurio-order-reference">#' . esc_html( $subscription_id ) . '</div>';
+				$subscription_url = $this->get_admin_subscription_url( $subscription_id );
+				$subscription_label = sprintf(
+					/* translators: %d: subscription ID. */
+					__( 'Subscription #%d', 'megurio-subscriptions-for-woocommerce' ),
+					$subscription_id
+				);
+				echo '<div class="megurio-order-reference"><a href="' . esc_url( $subscription_url ) . '">' . esc_html( $subscription_label ) . '</a></div>';
 			}
 			return;
 		}
@@ -591,6 +598,52 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		echo '<span class="megurio-muted">-</span>';
+	}
+
+	/**
+	 * 更新注文の管理画面に作成元の定期購入リンクを表示します。
+	 *
+	 * @param WC_Order $order 注文。
+	 * @return void
+	 */
+	public function render_order_subscription_reference( $order ) {
+		if ( ! $order instanceof WC_Order || 'yes' !== $order->get_meta( '_megurio_is_renewal_order', true ) ) {
+			return;
+		}
+
+		$subscription_id = absint( $order->get_meta( '_megurio_subscription_id', true ) );
+		if ( ! $subscription_id ) {
+			return;
+		}
+
+		$subscription_url   = $this->get_admin_subscription_url( $subscription_id );
+		$subscription_label = sprintf(
+			/* translators: %d: subscription ID. */
+			__( 'Subscription #%d', 'megurio-subscriptions-for-woocommerce' ),
+			$subscription_id
+		);
+		?>
+		<p class="form-field form-field-wide megurio-order-subscription-reference">
+			<strong><?php esc_html_e( 'Source Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></strong><br>
+			<a href="<?php echo esc_url( $subscription_url ); ?>"><?php echo esc_html( $subscription_label ); ?></a>
+		</p>
+		<?php
+	}
+
+	/**
+	 * 定期購入管理画面の詳細 URL を返します。
+	 *
+	 * @param int $subscription_id 定期購入 ID。
+	 * @return string
+	 */
+	protected function get_admin_subscription_url( $subscription_id ) {
+		return add_query_arg(
+			array(
+				'page'            => 'megurio-subscriptions',
+				'subscription_id' => absint( $subscription_id ),
+			),
+			admin_url( 'admin.php' )
+		);
 	}
 
 	/**
