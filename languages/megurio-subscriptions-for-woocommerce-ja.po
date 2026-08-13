@@ -51,6 +51,13 @@ msgstr "更新注文"
 msgid "Initial Subscription Order"
 msgstr "初回定期購入注文"
 
+#. translators: %d: subscription ID
+msgid "Subscription #%d"
+msgstr "定期購入 #%d"
+
+msgid "Source Subscription"
+msgstr "作成元の定期購入"
+
 msgid "Run Renewal Order Scan Now"
 msgstr "今すぐ更新注文スキャンを実行"
 
