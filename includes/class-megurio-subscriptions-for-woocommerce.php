@@ -62,6 +62,11 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	const RENEWAL_RETRY_INTERVALS = array( 2, 3, 2 );
 
 	/**
+	 * 有効な更新周期の単位です。この一覧にない単位は次回請求日を計算できません。
+	 */
+	const VALID_INTERVAL_UNITS = array( 'day', 'week', 'month', 'year' );
+
+	/**
 	 * 初期化します。
 	 */
 	public function __construct() {
@@ -1880,6 +1885,12 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$interval_unit  = isset( $_POST['_megurio_interval_unit'] ) ? sanitize_text_field( wp_unslash( $_POST['_megurio_interval_unit'] ) ) : 'month';
 		$signup_fee     = isset( $_POST['_megurio_signup_fee'] ) ? wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['_megurio_signup_fee'] ) ) ) : '';
 
+		// 不正な周期単位は次回請求日が計算できず自動更新が暴走するため、
+		// 許可リスト外の値は「month」にフォールバックする。
+		if ( ! in_array( $interval_unit, self::VALID_INTERVAL_UNITS, true ) ) {
+			$interval_unit = 'month';
+		}
+
 		$this->set_product_meta_bulk(
 			$product_id,
 			array(
@@ -2323,6 +2334,13 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
+		// すでに支払い済み・キャンセル済み・返金済みの注文は再課金しない。
+		// 手動支払いや ActionScheduler の競合で二重課金が発生するのを防ぐ。
+		if ( in_array( $renewal_order->get_status(), array( 'processing', 'completed', 'cancelled', 'refunded' ), true ) ) {
+			$this->cancel_renewal_retries( $renewal_order->get_id() );
+			return;
+		}
+
 		$retry_count = (int) $renewal_order->get_meta( '_megurio_retry_count', true );
 
 		// 再試行のため注文を保留中にリセットする。
@@ -2359,6 +2377,15 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 					array(
 						'key'   => '_megurio_subscription_status',
 						'value' => 'active',
+					),
+					// next_payment が 0 以下のレコードは請求日が未計算/不正なので除外する。
+					// これがないと next_payment=0 のレコードが毎回「期限切れ」と判定され、
+					// 30 分ごとに更新注文が作られて二重・多重課金になる。
+					array(
+						'key'     => '_megurio_next_payment',
+						'value'   => 0,
+						'compare' => '>',
+						'type'    => 'NUMERIC',
 					),
 					array(
 						'key'     => '_megurio_next_payment',
