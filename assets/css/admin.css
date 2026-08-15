@@ -28,7 +28,7 @@
 
 .megurio-admin-grid {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(160px, 1fr));
+	grid-template-columns: repeat(5, minmax(140px, 1fr));
 	gap: 12px;
 	margin: 16px 0 20px;
 }
@@ -66,6 +66,69 @@
 	background: #f6f7f7;
 }
 
+.megurio-admin-table__subscription strong,
+.megurio-admin-table__subscription a,
+.megurio-admin-table__customer strong,
+.megurio-admin-table__customer small,
+.megurio-admin-table__status small,
+.megurio-admin-table__renewal > a {
+	display: block;
+}
+
+.megurio-admin-table__subscription strong,
+.megurio-admin-table__customer strong {
+	margin-bottom: 4px;
+}
+
+.megurio-admin-table__customer small,
+.megurio-admin-table__status small {
+	margin-top: 5px;
+	color: #646970;
+	line-height: 1.35;
+}
+
+.megurio-admin-table__renewal .megurio-business-status {
+	margin-top: 5px;
+}
+
+.megurio-admin-table .order-status,
+.megurio-admin-actions .order-status {
+	display: inline-flex;
+	align-items: center;
+	margin: 0;
+	padding: 5px 9px;
+	color: #1d2327;
+	background: #f0f0f1;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.megurio-admin-table .order-status.status-processing,
+.megurio-admin-actions .order-status.status-processing {
+	color: #006b1b;
+	background: #edfaef;
+}
+
+.megurio-admin-table .order-status.status-on-hold,
+.megurio-admin-actions .order-status.status-on-hold {
+	color: #6c4600;
+	background: #fcf3d7;
+}
+
+.megurio-admin-table .order-status.status-pending,
+.megurio-admin-actions .order-status.status-pending {
+	color: #135e96;
+	background: #eef6fc;
+}
+
+.megurio-admin-table .order-status.status-cancelled,
+.megurio-admin-actions .order-status.status-cancelled {
+	color: #50575e;
+	background: #f0f0f1;
+}
+
 .megurio-admin-detail {
 	margin-top: 20px;
 	background: #fff;
@@ -81,6 +144,31 @@
 .megurio-note-list li {
 	padding: 10px 0;
 	border-bottom: 1px solid #f0f0f1;
+}
+
+.megurio-admin-history {
+	margin-top: 22px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+}
+
+.megurio-admin-history summary {
+	padding: 14px 16px;
+	background: #f6f7f7;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.megurio-admin-history[open] summary {
+	border-bottom: 1px solid #dcdcde;
+	border-radius: 6px 6px 0 0;
+}
+
+.megurio-admin-history .megurio-note-list {
+	margin: 0;
+	padding: 0 16px;
 }
 
 .megurio-admin-meta {
@@ -99,6 +187,82 @@
 .megurio-admin-meta strong {
 	display: block;
 	margin-bottom: 4px;
+}
+
+.megurio-admin-meta span,
+.megurio-admin-meta small {
+	display: block;
+}
+
+.megurio-admin-meta small {
+	margin-top: 3px;
+	color: #646970;
+}
+
+.megurio-admin-actions {
+	margin: 24px 0;
+	padding: 18px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+}
+
+.megurio-admin-actions h3 {
+	margin: 0 0 12px;
+}
+
+.megurio-admin-actions__current {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 14px;
+}
+
+.megurio-admin-actions__current > span:last-child {
+	color: #50575e;
+}
+
+.megurio-admin-actions__buttons {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(220px, 1fr));
+	gap: 12px;
+}
+
+.megurio-admin-action-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 14px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+}
+
+.megurio-admin-action-card p {
+	margin: 0;
+	color: #50575e;
+}
+
+.megurio-admin-action-card form {
+	flex: 0 0 auto;
+}
+
+.megurio-admin-action-card--danger {
+	background: #fff8f8;
+	border-color: #e6b7b7;
+}
+
+.megurio-admin-action-card .megurio-button-danger {
+	color: #b32d2e;
+	border-color: #b32d2e;
+}
+
+.megurio-admin-action-card .megurio-button-danger:hover,
+.megurio-admin-action-card .megurio-button-danger:focus {
+	color: #fff;
+	background: #b32d2e;
+	border-color: #b32d2e;
 }
 
 .megurio-subscription-overview {
@@ -438,7 +602,135 @@
 	background: #f6f7f7;
 }
 
+.megurio-business-status {
+	display: inline-flex;
+	flex-direction: column;
+	gap: 3px;
+	line-height: 1.25;
+}
+
+.megurio-business-status strong {
+	color: #1d2327;
+	font-size: 13px;
+}
+
+.megurio-business-status small {
+	color: #646970;
+	font-size: 11px;
+}
+
+.megurio-business-status--awaiting-payment strong {
+	color: #8a5a00;
+}
+
+.megurio-business-status--paid strong {
+	color: #008a20;
+}
+
+.megurio-business-status--failed strong {
+	color: #b32d2e;
+}
+
+.megurio-business-status--refunded strong,
+.megurio-business-status--closed strong {
+	color: #50575e;
+}
+
 @media screen and (max-width: 782px) {
+	.megurio-admin-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.megurio-admin-table,
+	.megurio-admin-table tbody,
+	.megurio-admin-table tr,
+	.megurio-admin-table td,
+	.megurio-admin-subtable,
+	.megurio-admin-subtable tbody,
+	.megurio-admin-subtable tr,
+	.megurio-admin-subtable td {
+		display: block;
+	}
+
+	.megurio-admin-table,
+	.megurio-admin-subtable {
+		background: transparent;
+		border: 0;
+	}
+
+	.megurio-admin-table thead,
+	.megurio-admin-subtable thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+	}
+
+	.megurio-admin-table tr,
+	.megurio-admin-subtable tr {
+		margin-bottom: 12px;
+		background: #fff;
+		border: 1px solid #dcdcde;
+		border-radius: 8px;
+		overflow: hidden;
+	}
+
+	.megurio-admin-table td,
+	.megurio-admin-subtable td {
+		position: relative;
+		min-height: 20px;
+		padding: 10px 12px 10px 128px;
+		border-bottom: 1px solid #f0f0f1;
+	}
+
+	.megurio-admin-table td::before,
+	.megurio-admin-subtable td::before {
+		content: attr(data-label);
+		position: absolute;
+		top: 10px;
+		left: 12px;
+		width: 104px;
+		color: #50575e;
+		font-size: 12px;
+		font-weight: 700;
+	}
+
+	.megurio-admin-table td:last-child,
+	.megurio-admin-subtable td:last-child {
+		border-bottom: 0;
+	}
+
+	.megurio-admin-table td[colspan] {
+		padding-left: 12px;
+	}
+
+	.megurio-admin-table td[colspan]::before {
+		display: none;
+	}
+
+	.megurio-admin-table td .button {
+		width: 100%;
+		text-align: center;
+	}
+
+	.megurio-admin-meta,
+	.megurio-admin-actions__buttons {
+		grid-template-columns: 1fr;
+	}
+
+	.megurio-admin-actions__current,
+	.megurio-admin-action-card {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.megurio-admin-action-card form,
+	.megurio-admin-action-card .button {
+		width: 100%;
+	}
+
 	.megurio-subscription-overview {
 		padding: 16px;
 	}

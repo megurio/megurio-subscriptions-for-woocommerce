@@ -41,6 +41,30 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	const SUBSCRIPTION_TYPE = 'megurio_subscription';
 
 	/**
+	 * 顧客向けに公開する定期購入の 4 状態です。
+	 */
+	const STATUS_PENDING   = 'pending';
+	const STATUS_ACTIVE    = 'active';
+	const STATUS_ON_HOLD   = 'on-hold';
+	const STATUS_CANCELLED = 'cancelled';
+
+	/**
+	 * on-hold の理由です。再開権限は主状態ではなく、この理由まで見て判定します。
+	 */
+	const HOLD_REASON_CUSTOMER_PAUSED            = 'customer_paused';
+	const HOLD_REASON_ADMIN_PAUSED               = 'admin_paused';
+	const HOLD_REASON_BANK_TRANSFER_PENDING       = 'bank_transfer_pending';
+	const HOLD_REASON_PAYMENT_RETRYING            = 'payment_retrying';
+	const HOLD_REASON_RETRY_EXHAUSTED             = 'retry_exhausted';
+	const HOLD_REASON_UNSUPPORTED_PAYMENT_METHOD  = 'unsupported_payment_method';
+	const HOLD_REASON_RENEWAL_REFUNDED            = 'renewal_refunded';
+
+	/**
+	 * 停止理由メタの移行バージョンです。
+	 */
+	const HOLD_REASON_STORAGE_VERSION = 1;
+
+	/**
 	 * 更新注文を作る定期処理のフック名です。
 	 */
 	const ACTION_CREATE_RENEWALS = 'megurio_create_renewal_orders';
@@ -67,6 +91,19 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	const VALID_INTERVAL_UNITS = array( 'day', 'week', 'month', 'year' );
 
 	/**
+	 * UNIX タイムスタンプ保存形式のバージョンです。
+	 *
+	 * v1 は current_time( 'timestamp' ) のローカル時刻を UNIX タイムスタンプとして
+	 * 保存していたため、表示時と定期実行時にタイムゾーンが二重適用されていました。
+	 */
+	const TIMESTAMP_STORAGE_VERSION = 2;
+
+	/**
+	 * 更新作成・再課金の多重実行を防ぐロックの有効秒数です。
+	 */
+	const PROCESSING_LOCK_TTL = 300;
+
+	/**
 	 * 初期化します。
 	 */
 	public function __construct() {
@@ -74,6 +111,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		add_action( 'init', array( $this, 'register_subscription_order_type' ), 5 );
 		add_action( 'init', array( $this, 'register_account_endpoints' ), 6 );
+		add_action( 'init', array( $this, 'maybe_migrate_subscription_timestamps' ), 15 );
+		add_action( 'init', array( $this, 'maybe_migrate_subscription_hold_reasons' ), 16 );
 		add_action( 'init', array( $this, 'register_cron' ), 20 );
 		add_action( 'init', array( $this, 'maybe_refresh_rewrite_rules' ), 99 );
 		add_filter( 'cron_schedules', array( $this, 'register_cron_interval' ) );
@@ -134,7 +173,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		add_action( 'woocommerce_order_status_changed', array( $this, 'handle_order_status_change' ), 20, 3 );
 
 		add_action( self::ACTION_CREATE_RENEWALS, array( $this, 'run_renewal_scheduler' ) );
-		add_action( self::ACTION_RETRY_RENEWAL, array( $this, 'run_retry_renewal_payment' ) );
+		add_action( self::ACTION_RETRY_RENEWAL, array( $this, 'run_retry_renewal_payment' ), 10, 2 );
 	}
 
 	/**
@@ -151,6 +190,90 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		flush_rewrite_rules( false );
 		update_option( 'megurio_plugin_version', self::PLUGIN_VERSION );
+	}
+
+	/**
+	 * 旧形式で保存されたローカル擬似タイムスタンプを真の UNIX タイムスタンプへ変換します。
+	 *
+	 * @return void
+	 */
+	public function maybe_migrate_subscription_timestamps() {
+		$saved_version = absint( get_option( 'megurio_timestamp_storage_version', 1 ) );
+		if ( $saved_version >= self::TIMESTAMP_STORAGE_VERSION || ! function_exists( 'wc_get_orders' ) ) {
+			return;
+		}
+
+		$subscription_ids = wc_get_orders(
+			array(
+				'limit'  => -1,
+				'type'   => self::SUBSCRIPTION_TYPE,
+				'return' => 'ids',
+			)
+		);
+
+		foreach ( $subscription_ids as $subscription_id ) {
+			$meta_map = array();
+			foreach ( array( '_megurio_schedule_start', '_megurio_next_payment' ) as $meta_key ) {
+				$legacy_timestamp = (int) $this->get_object_meta( $subscription_id, $meta_key );
+				if ( $legacy_timestamp > 0 ) {
+					$meta_map[ $meta_key ] = $this->convert_legacy_local_timestamp( $legacy_timestamp );
+				}
+			}
+
+			if ( ! empty( $meta_map ) ) {
+				$this->set_subscription_meta( $subscription_id, $meta_map );
+			}
+		}
+
+		update_option( 'megurio_timestamp_storage_version', self::TIMESTAMP_STORAGE_VERSION );
+	}
+
+	/**
+	 * 旧データの on-hold 状態に明示的な停止理由を補います。
+	 *
+	 * 理由を安全に特定できないものは管理者停止として扱い、顧客側からの誤再開を防ぎます。
+	 *
+	 * @return void
+	 */
+	public function maybe_migrate_subscription_hold_reasons() {
+		$saved_version = absint( get_option( 'megurio_hold_reason_storage_version', 0 ) );
+		if ( $saved_version >= self::HOLD_REASON_STORAGE_VERSION || ! function_exists( 'wc_get_orders' ) ) {
+			return;
+		}
+
+		$subscription_ids = wc_get_orders(
+			array(
+				'limit'  => -1,
+				'type'   => self::SUBSCRIPTION_TYPE,
+				'return' => 'ids',
+			)
+		);
+
+		foreach ( $subscription_ids as $subscription_id ) {
+			$status = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
+			if ( self::STATUS_ON_HOLD !== $status ) {
+				$this->update_object_meta( $subscription_id, '_megurio_hold_reason', '' );
+				continue;
+			}
+
+			$reason        = self::HOLD_REASON_ADMIN_PAUSED;
+			$renewal_order = $this->get_last_renewal_order( $subscription_id );
+			if ( (int) $this->get_object_meta( $subscription_id, '_megurio_paused_at' ) > 0
+				&& ! $this->has_unpaid_renewal_order( $subscription_id )
+			) {
+				$reason = self::HOLD_REASON_CUSTOMER_PAUSED;
+			} elseif ( $renewal_order instanceof WC_Order && 'yes' === $renewal_order->get_meta( '_megurio_retry_exhausted', true ) ) {
+				$reason = self::HOLD_REASON_RETRY_EXHAUSTED;
+			} elseif ( 'manual' === (string) $this->get_object_meta( $subscription_id, '_megurio_collection_method' )
+				&& $this->has_unpaid_renewal_order( $subscription_id )
+			) {
+				$reason = self::HOLD_REASON_BANK_TRANSFER_PENDING;
+			}
+
+			$this->update_object_meta( $subscription_id, '_megurio_hold_reason', $reason );
+		}
+
+		update_option( 'megurio_hold_reason_storage_version', self::HOLD_REASON_STORAGE_VERSION );
 	}
 
 	/**
@@ -268,20 +391,24 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				$subscription_id = isset( $_POST['subscription_id'] ) ? absint( wp_unslash( $_POST['subscription_id'] ) ) : 0;
 				$target_status   = isset( $_POST['target_status'] ) ? sanitize_text_field( wp_unslash( $_POST['target_status'] ) ) : '';
 
-				if ( $subscription_id && $this->manually_update_subscription_status( $subscription_id, $target_status ) ) {
-					$redirect_url = add_query_arg(
-						array(
-							'page'            => 'megurio-subscriptions',
-							'subscription_id' => $subscription_id,
-							'megurio_notice'     => rawurlencode( __( 'Subscription status updated.', 'megurio-subscriptions-for-woocommerce' ) ),
-							'megurio_count'      => 1,
+				$updated = $subscription_id && $this->manually_update_subscription_status( $subscription_id, $target_status );
+				$redirect_url = add_query_arg(
+					array(
+						'page'                => 'megurio-subscriptions',
+						'subscription_id'     => $subscription_id,
+						'megurio_notice'      => rawurlencode(
+							$updated
+								? __( 'Subscription status updated.', 'megurio-subscriptions-for-woocommerce' )
+								: __( 'Subscription status was not changed. Resolve the unpaid renewal order before reactivating it.', 'megurio-subscriptions-for-woocommerce' )
 						),
-						admin_url( 'admin.php' )
-					);
+						'megurio_notice_type' => $updated ? 'success' : 'error',
+						'megurio_count'       => $updated ? 1 : 0,
+					),
+					admin_url( 'admin.php' )
+				);
 
-					wp_safe_redirect( $redirect_url );
-					exit;
-				}
+				wp_safe_redirect( $redirect_url );
+				exit;
 			} elseif ( 'save_email_settings' === $action ) {
 				check_admin_referer( 'megurio_save_email_settings' );
 
@@ -393,16 +520,21 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$status = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
 
 		if ( 'cancel_subscription' === $action ) {
-			if ( ! in_array( $status, array( 'pending', 'active', 'on-hold' ), true ) ) {
+			if ( ! in_array( $status, array( self::STATUS_PENDING, self::STATUS_ACTIVE, self::STATUS_ON_HOLD ), true ) ) {
 				wc_add_notice( __( 'This subscription cannot be cancelled at this time.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
 				wp_safe_redirect( $redirect_url );
 				exit;
 			}
 
 			$this->set_subscription_meta( $subscription_id, array(
-				'_megurio_subscription_status' => 'cancelled',
+				'_megurio_subscription_status' => self::STATUS_CANCELLED,
+				'_megurio_hold_reason'         => '',
 				'_megurio_next_payment'        => 0,
+				'_megurio_pending_renewal_due_at' => 0,
+				'_megurio_paused_at'           => 0,
+				'_megurio_paused_remaining'    => 0,
 			) );
+			$this->cancel_subscription_renewal_retries( $subscription_id );
 
 			$subscription = wc_get_order( $subscription_id );
 			if ( $subscription instanceof WC_Order ) {
@@ -413,15 +545,26 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			wc_add_notice( __( 'Your subscription has been cancelled.', 'megurio-subscriptions-for-woocommerce' ), 'success' );
 
 		} elseif ( 'pause_subscription' === $action ) {
-			if ( 'active' !== $status ) {
+			if ( self::STATUS_ACTIVE !== $status ) {
 				wc_add_notice( __( 'This subscription cannot be paused at this time.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
 				wp_safe_redirect( $redirect_url );
 				exit;
 			}
 
+			if ( $this->has_unpaid_renewal_order( $subscription_id ) ) {
+				wc_add_notice( __( 'This subscription cannot be paused while a renewal payment is pending. Resolve the payment or cancel the subscription instead.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
+				wp_safe_redirect( $redirect_url );
+				exit;
+			}
+
+			$current_time = $this->get_current_timestamp();
+			$next_payment = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
 			$this->set_subscription_meta( $subscription_id, array(
-				'_megurio_subscription_status' => 'on-hold',
+				'_megurio_subscription_status' => self::STATUS_ON_HOLD,
+				'_megurio_hold_reason'         => self::HOLD_REASON_CUSTOMER_PAUSED,
 				'_megurio_next_payment'        => 0,
+				'_megurio_paused_at'           => $current_time,
+				'_megurio_paused_remaining'    => max( 0, $next_payment - $current_time ),
 			) );
 
 			$subscription = wc_get_order( $subscription_id );
@@ -432,16 +575,19 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			wc_add_notice( __( 'Your subscription has been paused.', 'megurio-subscriptions-for-woocommerce' ), 'success' );
 
 		} elseif ( 'resume_subscription' === $action ) {
-			if ( 'on-hold' !== $status ) {
+			if ( ! $this->can_customer_resume_subscription( $subscription_id ) ) {
 				wc_add_notice( __( 'This subscription cannot be resumed at this time.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
 				wp_safe_redirect( $redirect_url );
 				exit;
 			}
 
-			$current_time = current_time( 'timestamp' );
+			$current_time = $this->get_current_timestamp();
 			$this->set_subscription_meta( $subscription_id, array(
-				'_megurio_subscription_status' => 'active',
-				'_megurio_next_payment'        => $this->calculate_next_payment( $subscription_id, $current_time ),
+				'_megurio_subscription_status' => self::STATUS_ACTIVE,
+				'_megurio_hold_reason'         => '',
+				'_megurio_next_payment'        => $this->calculate_resumed_next_payment( $subscription_id, $current_time ),
+				'_megurio_paused_at'           => 0,
+				'_megurio_paused_remaining'    => 0,
 			) );
 
 			$subscription = wc_get_order( $subscription_id );
@@ -467,13 +613,18 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			}
 
 			$token = WC_Payment_Tokens::get( $token_id );
-			if ( ! $token || (int) $token->get_user_id() !== get_current_user_id() ) {
+			$subscription = wc_get_order( $subscription_id );
+			$payment_method = $this->get_subscription_payment_method( $subscription_id, $subscription );
+			if ( ! $token
+				|| (int) $token->get_user_id() !== get_current_user_id()
+				|| ! $this->gateway_integration->is_auto_charge_gateway( $token->get_gateway_id() )
+				|| $token->get_gateway_id() !== $payment_method
+			) {
 				wc_add_notice( __( 'Invalid payment method selected.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
 				wp_safe_redirect( $redirect_url );
 				exit;
 			}
 
-			$subscription = wc_get_order( $subscription_id );
 			if ( $subscription instanceof WC_Order ) {
 				$subscription->update_meta_data( '_megurio_payment_token_id', $token_id );
 				$subscription->save();
@@ -677,6 +828,17 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			array(),
 			self::PLUGIN_VERSION . '-' . ( file_exists( $admin_css_path ) ? filemtime( $admin_css_path ) : time() )
 		);
+
+		if ( $is_megurio_screen ) {
+			$admin_script_path = dirname( __DIR__ ) . '/assets/js/admin-subscriptions.js';
+			wp_enqueue_script(
+				'megurio-admin-subscriptions',
+				plugins_url( 'assets/js/admin-subscriptions.js', dirname( __DIR__ ) . '/megurio-subscriptions-for-woocommerce.php' ),
+				array(),
+				self::PLUGIN_VERSION . '-' . ( file_exists( $admin_script_path ) ? filemtime( $admin_script_path ) : time() ),
+				true
+			);
+		}
 	}
 
 	/**
@@ -691,6 +853,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		$current_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'subscriptions';
 		$notice      = $this->get_query_text( 'megurio_notice' );
+		$notice_type = 'error' === $this->get_query_text( 'megurio_notice_type' ) ? 'error' : 'success';
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Megurio Subscriptions', 'megurio-subscriptions-for-woocommerce' ); ?></h1>
@@ -700,7 +863,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			</nav>
 
 		<?php if ( $notice ) : ?>
-			<div class="notice notice-success is-dismissible">
+			<div class="notice notice-<?php echo esc_attr( $notice_type ); ?> is-dismissible">
 				<p><?php echo esc_html( $notice ); ?></p>
 			</div>
 		<?php endif; ?>
@@ -708,14 +871,14 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		<?php if ( 'email-settings' === $current_tab ) :
 			$this->render_email_settings_tab();
 		else :
-		$subscription_ids = $this->get_all_subscription_ids();
+		$subscription_ids = $this->sort_admin_subscription_ids( $this->get_all_subscription_ids() );
 		$selected_id      = $this->get_query_int( 'subscription_id' );
 		$selected_order   = $selected_id ? wc_get_order( $selected_id ) : false;
 		$counts           = $this->get_subscription_status_counts( $subscription_ids );
 		$notice_count     = $this->get_query_int( 'megurio_count' );
 		?>
 		<?php if ( ! ( $selected_order instanceof WC_Order ) ) : ?>
-			<p><?php esc_html_e( 'This page shows all subscription records and status flows created by the subscription plugin.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
+			<p><?php esc_html_e( 'Review subscription status, upcoming billing, and renewal orders. Subscriptions requiring attention are shown first.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
 
 		<?php if ( $notice_count ) : ?>
 			<div class="notice notice-info is-dismissible">
@@ -727,6 +890,10 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 					<div class="megurio-admin-card">
 						<div><?php esc_html_e( 'Total Subscriptions', 'megurio-subscriptions-for-woocommerce' ); ?></div>
 						<strong><?php echo esc_html( count( $subscription_ids ) ); ?></strong>
+					</div>
+					<div class="megurio-admin-card">
+						<div><?php esc_html_e( 'Pending', 'megurio-subscriptions-for-woocommerce' ); ?></div>
+						<strong><?php echo esc_html( $counts['pending'] ); ?></strong>
 					</div>
 					<div class="megurio-admin-card">
 						<div><?php esc_html_e( 'Active', 'megurio-subscriptions-for-woocommerce' ); ?></div>
@@ -745,20 +912,19 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			<table class="megurio-admin-table">
 				<thead>
 					<tr>
-							<th><?php esc_html_e( 'Subscription ID', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Product', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Total', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Parent Order', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<th><?php esc_html_e( 'Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<th><?php esc_html_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<th><?php esc_html_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<th><?php esc_html_e( 'Renewal Amount', 'megurio-subscriptions-for-woocommerce' ); ?></th>
 							<th><?php esc_html_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Last Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Flow', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<th><?php esc_html_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<th><?php esc_html_e( 'Action', 'megurio-subscriptions-for-woocommerce' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
 						<?php if ( empty( $subscription_ids ) ) : ?>
 							<tr>
-								<td colspan="8"><?php esc_html_e( 'No subscription records found.', 'megurio-subscriptions-for-woocommerce' ); ?></td>
+								<td colspan="7"><?php esc_html_e( 'No subscription records found.', 'megurio-subscriptions-for-woocommerce' ); ?></td>
 							</tr>
 					<?php else : ?>
 						<?php foreach ( $subscription_ids as $subscription_id ) : ?>
@@ -766,9 +932,11 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 								$status          = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
 								$subscription    = wc_get_order( $subscription_id );
 								$product_id      = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
-								$parent_order_id = absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) );
+								$customer        = $this->get_subscription_customer_display( $subscription_id );
 								$next_payment    = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
 								$last_renewal_id = absint( $this->get_object_meta( $subscription_id, '_megurio_last_renewal_order' ) );
+								$last_renewal    = $last_renewal_id ? wc_get_order( $last_renewal_id ) : false;
+								$runtime_status  = $this->get_subscription_runtime_status( $subscription_id );
 								$product_title   = $product_id ? get_the_title( $product_id ) : '-';
 								$detail_page_url = add_query_arg(
 									array(
@@ -779,32 +947,35 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 								);
 								?>
 							<tr>
-								<td>#<?php echo esc_html( $subscription_id ); ?></td>
-								<td><?php echo wp_kses_post( $this->render_status_badge( $status, $subscription_id ) ); ?></td>
-								<td>
+								<td data-label="<?php esc_attr_e( 'Subscription', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__subscription">
+									<strong>#<?php echo esc_html( $subscription_id ); ?></strong>
 									<?php if ( $product_id ) : ?>
 										<a href="<?php echo esc_url( get_edit_post_link( $product_id ) ); ?>"><?php echo esc_html( $product_title ); ?></a>
 									<?php else : ?>
 										-
 									<?php endif; ?>
 								</td>
-								<td><?php echo $subscription instanceof WC_Order ? wp_kses_post( $subscription->get_formatted_order_total() ) : '-'; ?></td>
-								<td>
-									<?php if ( $parent_order_id ) : ?>
-										<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $parent_order_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $parent_order_id ); ?></a>
-									<?php else : ?>
-										-
-									<?php endif; ?>
+								<td data-label="<?php esc_attr_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__customer">
+									<?php if ( $customer['name'] ) : ?><strong><?php echo esc_html( $customer['name'] ); ?></strong><?php endif; ?>
+									<?php if ( $customer['email'] ) : ?><small><?php echo esc_html( $customer['email'] ); ?></small><?php endif; ?>
+									<?php if ( $customer['id'] ) : ?><small>#<?php echo esc_html( $customer['id'] ); ?></small><?php endif; ?>
+									<?php if ( ! $customer['name'] && ! $customer['email'] && ! $customer['id'] ) : ?>-<?php endif; ?>
 									</td>
-									<td><?php echo esc_html( $this->format_timestamp( $next_payment ) ); ?></td>
-									<td>
-									<?php if ( $last_renewal_id ) : ?>
+								<td data-label="<?php esc_attr_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__status">
+									<?php echo wp_kses_post( $this->render_status_badge( $status, $subscription_id ) ); ?>
+									<?php if ( ! empty( $runtime_status['description'] ) ) : ?><small><?php echo esc_html( $runtime_status['description'] ); ?></small><?php endif; ?>
+								</td>
+								<td data-label="<?php esc_attr_e( 'Renewal Amount', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $subscription instanceof WC_Order ? wp_kses_post( $subscription->get_formatted_order_total() ) : '-'; ?></td>
+								<td data-label="<?php esc_attr_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo esc_html( $this->format_timestamp( $next_payment ) ); ?></td>
+								<td data-label="<?php esc_attr_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__renewal">
+									<?php if ( $last_renewal instanceof WC_Order ) : ?>
 										<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $last_renewal_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $last_renewal_id ); ?></a>
+										<?php echo wp_kses_post( $this->render_order_business_status( $last_renewal ) ); ?>
 									<?php else : ?>
-										-
+										<?php esc_html_e( 'Not created yet', 'megurio-subscriptions-for-woocommerce' ); ?>
 									<?php endif; ?>
 								</td>
-								<td><a href="<?php echo esc_url( $detail_page_url ); ?>"><?php esc_html_e( 'View Details', 'megurio-subscriptions-for-woocommerce' ); ?></a></td>
+								<td data-label="<?php esc_attr_e( 'Action', 'megurio-subscriptions-for-woocommerce' ); ?>"><a class="button button-secondary" href="<?php echo esc_url( $detail_page_url ); ?>"><?php esc_html_e( 'View Details', 'megurio-subscriptions-for-woocommerce' ); ?></a></td>
 							</tr>
 						<?php endforeach; ?>
 					<?php endif; ?>
@@ -814,19 +985,21 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 			<?php if ( $selected_order instanceof WC_Order ) : ?>
 				<?php
-					$selected_status   = (string) $this->get_object_meta( $selected_id, '_megurio_subscription_status' );
-					$selected_product  = absint( $this->get_object_meta( $selected_id, '_megurio_product_id' ) );
-					$selected_parent   = absint( $this->get_object_meta( $selected_id, '_megurio_parent_order_id' ) );
-					$selected_customer = absint( $this->get_object_meta( $selected_id, '_megurio_customer_id' ) );
-					$selected_start    = (int) $this->get_object_meta( $selected_id, '_megurio_schedule_start' );
-					$selected_next     = (int) $this->get_object_meta( $selected_id, '_megurio_next_payment' );
-					$interval_count    = max( 1, absint( $this->get_object_meta( $selected_id, '_megurio_interval_count' ) ) );
-					$interval_unit     = (string) $this->get_object_meta( $selected_id, '_megurio_interval_unit' );
-					$payment_title     = $this->get_subscription_payment_method_title( $selected_id, $selected_order );
-					$renewal_ids       = $this->get_object_meta( $selected_id, '_megurio_renewal_order_ids' );
-					$renewal_ids       = is_array( $renewal_ids ) ? $renewal_ids : array();
-					$runtime_status    = $this->get_subscription_runtime_status( $selected_id );
-					$order_notes       = wc_get_order_notes(
+					$selected_status           = (string) $this->get_object_meta( $selected_id, '_megurio_subscription_status' );
+					$selected_product          = absint( $this->get_object_meta( $selected_id, '_megurio_product_id' ) );
+					$selected_parent           = absint( $this->get_object_meta( $selected_id, '_megurio_parent_order_id' ) );
+					$selected_customer         = absint( $this->get_object_meta( $selected_id, '_megurio_customer_id' ) );
+					$selected_customer_display = $this->get_subscription_customer_display( $selected_id );
+					$selected_start            = (int) $this->get_object_meta( $selected_id, '_megurio_schedule_start' );
+					$selected_next             = (int) $this->get_object_meta( $selected_id, '_megurio_next_payment' );
+					$interval_count            = max( 1, absint( $this->get_object_meta( $selected_id, '_megurio_interval_count' ) ) );
+					$interval_unit             = (string) $this->get_object_meta( $selected_id, '_megurio_interval_unit' );
+					$payment_title             = $this->get_subscription_payment_method_title( $selected_id, $selected_order );
+					$renewal_ids               = $this->get_object_meta( $selected_id, '_megurio_renewal_order_ids' );
+					$renewal_ids               = is_array( $renewal_ids ) ? $renewal_ids : array();
+					$renewal_ids               = $this->get_visible_renewal_order_ids( $renewal_ids );
+					$runtime_status            = $this->get_subscription_runtime_status( $selected_id );
+					$order_notes               = wc_get_order_notes(
 						array(
 							'order_id' => $selected_id,
 							'orderby'  => 'date_created',
@@ -876,8 +1049,11 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 							<?php endif; ?>
 						</div>
 						<div>
-							<strong><?php esc_html_e( 'Customer ID', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-							<?php echo $selected_customer ? esc_html( '#' . $selected_customer ) : '-'; ?>
+							<strong><?php esc_html_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+							<?php if ( $selected_customer_display['name'] ) : ?><span><?php echo esc_html( $selected_customer_display['name'] ); ?></span><?php endif; ?>
+							<?php if ( $selected_customer_display['email'] ) : ?><small><?php echo esc_html( $selected_customer_display['email'] ); ?></small><?php endif; ?>
+							<?php if ( $selected_customer ) : ?><small>#<?php echo esc_html( $selected_customer ); ?></small><?php endif; ?>
+							<?php if ( ! $selected_customer_display['name'] && ! $selected_customer_display['email'] && ! $selected_customer ) : ?>-<?php endif; ?>
 						</div>
 						<div>
 							<strong><?php esc_html_e( 'Payment Method', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
@@ -889,23 +1065,56 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 						</div>
 					</div>
 
-					<h3><?php esc_html_e( 'Admin Actions', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
-					<form method="post" action="">
-						<?php wp_nonce_field( 'megurio_change_subscription_status' ); ?>
-						<input type="hidden" name="page" value="megurio-subscriptions" />
-						<input type="hidden" name="megurio_action" value="change_status" />
-						<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $selected_id ); ?>" />
-						<label for="megurio-target-status"><strong><?php esc_html_e( 'Manually Change Status', 'megurio-subscriptions-for-woocommerce' ); ?></strong></label>
-						<select id="megurio-target-status" class="megurio-target-status" name="target_status">
-							<option value="pending" <?php selected( $selected_status, 'pending' ); ?>><?php esc_html_e( 'Pending', 'megurio-subscriptions-for-woocommerce' ); ?></option>
-							<option value="active" <?php selected( $selected_status, 'active' ); ?>><?php esc_html_e( 'Active', 'megurio-subscriptions-for-woocommerce' ); ?></option>
-							<option value="on-hold" <?php selected( $selected_status, 'on-hold' ); ?>><?php esc_html_e( 'On Hold', 'megurio-subscriptions-for-woocommerce' ); ?></option>
-							<option value="cancelled" <?php selected( $selected_status, 'cancelled' ); ?>><?php esc_html_e( 'Cancelled', 'megurio-subscriptions-for-woocommerce' ); ?></option>
-						</select>
-						<button type="submit" class="button button-secondary"><?php esc_html_e( 'Update Status', 'megurio-subscriptions-for-woocommerce' ); ?></button>
-					</form>
+					<section class="megurio-admin-actions" aria-labelledby="megurio-admin-actions-title">
+						<h3 id="megurio-admin-actions-title"><?php esc_html_e( 'Subscription Actions', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
+						<div class="megurio-admin-actions__current">
+							<strong><?php esc_html_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+							<?php echo wp_kses_post( $this->render_status_badge( $selected_status, $selected_id ) ); ?>
+							<span><?php echo esc_html( ! empty( $runtime_status['description'] ) ? $runtime_status['description'] : $this->get_subscription_status_label( $selected_status, $selected_id ) ); ?></span>
+						</div>
+						<?php if ( self::STATUS_CANCELLED === $selected_status ) : ?>
+							<p class="description"><?php esc_html_e( 'This subscription is already cancelled. No further billing will occur, and it cannot be reopened.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
+						<?php else : ?>
+							<div class="megurio-admin-actions__buttons">
+								<?php foreach ( array_keys( $this->get_allowed_subscription_status_targets( $selected_status ) ) as $target_value ) : ?>
+									<?php
+									if ( $target_value === $selected_status ) {
+										continue;
+									}
 
-					<h3><?php esc_html_e( 'Auto-Generated Renewal Orders', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
+									$is_cancel_action = self::STATUS_CANCELLED === $target_value;
+									if ( self::STATUS_ACTIVE === $target_value ) {
+										$action_label = self::STATUS_PENDING === $selected_status
+											? __( 'Start Subscription', 'megurio-subscriptions-for-woocommerce' )
+											: __( 'Resume Subscription', 'megurio-subscriptions-for-woocommerce' );
+										$action_description = self::STATUS_PENDING === $selected_status
+											? __( 'Confirm the initial order and begin scheduled billing.', 'megurio-subscriptions-for-woocommerce' )
+											: __( 'Resume scheduled billing from the next billing date.', 'megurio-subscriptions-for-woocommerce' );
+									} elseif ( self::STATUS_ON_HOLD === $target_value ) {
+										$action_label       = __( 'Pause Subscription', 'megurio-subscriptions-for-woocommerce' );
+										$action_description = __( 'Stop automatic billing temporarily. The subscription can be resumed later.', 'megurio-subscriptions-for-woocommerce' );
+									} else {
+										$action_label       = __( 'Cancel Subscription', 'megurio-subscriptions-for-woocommerce' );
+										$action_description = __( 'End all future billing. This action cannot be undone.', 'megurio-subscriptions-for-woocommerce' );
+									}
+									?>
+									<div class="megurio-admin-action-card <?php echo $is_cancel_action ? 'megurio-admin-action-card--danger' : ''; ?>">
+										<p><?php echo esc_html( $action_description ); ?></p>
+										<form method="post" action="" <?php echo $is_cancel_action ? 'class="megurio-admin-cancel-form" data-confirm="' . esc_attr__( 'This will end all future billing and cannot be undone. Cancel this subscription?', 'megurio-subscriptions-for-woocommerce' ) . '"' : ''; ?>>
+											<?php wp_nonce_field( 'megurio_change_subscription_status' ); ?>
+											<input type="hidden" name="page" value="megurio-subscriptions" />
+											<input type="hidden" name="megurio_action" value="change_status" />
+											<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $selected_id ); ?>" />
+											<input type="hidden" name="target_status" value="<?php echo esc_attr( $target_value ); ?>" />
+											<button type="submit" class="button <?php echo $is_cancel_action ? 'megurio-button-danger' : ( self::STATUS_ACTIVE === $target_value ? 'button-primary' : 'button-secondary' ); ?>"><?php echo esc_html( $action_label ); ?></button>
+										</form>
+									</div>
+								<?php endforeach; ?>
+							</div>
+						<?php endif; ?>
+					</section>
+
+					<h3><?php esc_html_e( 'Renewal Order History', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
 					<?php if ( empty( $renewal_ids ) ) : ?>
 						<p><?php esc_html_e( 'No renewal orders have been created yet.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
 					<?php else : ?>
@@ -922,35 +1131,37 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 								<?php foreach ( $renewal_ids as $renewal_id ) : ?>
 									<?php $renewal_order = wc_get_order( $renewal_id ); ?>
 									<tr>
-										<td>
+										<td data-label="<?php esc_attr_e( 'Order ID', 'megurio-subscriptions-for-woocommerce' ); ?>">
 											<?php if ( $renewal_order instanceof WC_Order ) : ?>
 												<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $renewal_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $renewal_id ); ?></a>
 											<?php else : ?>
 												#<?php echo esc_html( $renewal_id ); ?>
 											<?php endif; ?>
 										</td>
-										<td><?php echo $renewal_order instanceof WC_Order ? esc_html( wc_get_order_status_name( $renewal_order->get_status() ) ) : '-'; ?></td>
-										<td><?php echo $renewal_order instanceof WC_Order ? esc_html( $this->format_datetime_string( $renewal_order->get_date_created() ) ) : '-'; ?></td>
-										<td><?php echo $renewal_order instanceof WC_Order ? wp_kses_post( $renewal_order->get_formatted_order_total() ) : '-'; ?></td>
+										<td data-label="<?php esc_attr_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order instanceof WC_Order ? wp_kses_post( $this->render_order_business_status( $renewal_order ) ) : '-'; ?></td>
+										<td data-label="<?php esc_attr_e( 'Created Date', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order instanceof WC_Order ? esc_html( $this->format_datetime_string( $renewal_order->get_date_created() ) ) : '-'; ?></td>
+										<td data-label="<?php esc_attr_e( 'Total', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order instanceof WC_Order ? wp_kses_post( $renewal_order->get_formatted_order_total() ) : '-'; ?></td>
 									</tr>
 								<?php endforeach; ?>
 							</tbody>
 						</table>
 					<?php endif; ?>
 
-					<h3><?php esc_html_e( 'Status History Notes', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
-					<ul class="megurio-note-list">
-						<?php if ( empty( $order_notes ) ) : ?>
-							<li><?php esc_html_e( 'No notes yet.', 'megurio-subscriptions-for-woocommerce' ); ?></li>
-						<?php else : ?>
-							<?php foreach ( $order_notes as $note ) : ?>
-								<li>
-									<div><strong><?php echo esc_html( $this->format_datetime_string( $note->date_created ) ); ?></strong></div>
-									<div><?php echo wp_kses_post( wpautop( $this->link_order_references_in_note( $note->content ) ) ); ?></div>
-								</li>
-							<?php endforeach; ?>
-						<?php endif; ?>
-					</ul>
+					<details class="megurio-admin-history">
+						<summary><?php echo esc_html( sprintf( __( 'View Action and Payment History (%d entries)', 'megurio-subscriptions-for-woocommerce' ), count( $order_notes ) ) ); ?></summary>
+						<ul class="megurio-note-list">
+							<?php if ( empty( $order_notes ) ) : ?>
+								<li><?php esc_html_e( 'No notes yet.', 'megurio-subscriptions-for-woocommerce' ); ?></li>
+							<?php else : ?>
+								<?php foreach ( $order_notes as $note ) : ?>
+									<li>
+										<div><strong><?php echo esc_html( $this->format_datetime_string( $note->date_created ) ); ?></strong></div>
+										<div><?php echo wp_kses_post( wpautop( $this->link_order_references_in_note( $this->format_admin_subscription_note( $note->content ) ) ) ); ?></div>
+									</li>
+								<?php endforeach; ?>
+							<?php endif; ?>
+						</ul>
+					</details>
 				</div>
 			<?php endif; ?>
 		<?php endif; // end subscriptions tab ?>
@@ -988,7 +1199,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 		?>
-		<table class="shop_table shop_table_responsive my_account_orders account-orders-table">
+		<table class="shop_table shop_table_responsive my_account_orders account-orders-table megurio-subscription-list">
 			<thead>
 				<tr>
 					<th><?php esc_html_e( 'Subscription ID', 'megurio-subscriptions-for-woocommerce' ); ?></th>
@@ -1040,6 +1251,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			$interval_unit   = (string) $this->get_object_meta( $subscription_id, '_megurio_interval_unit' );
 			$renewal_ids     = $this->get_object_meta( $subscription_id, '_megurio_renewal_order_ids' );
 			$renewal_ids     = is_array( $renewal_ids ) ? $renewal_ids : array();
+			$renewal_ids     = $this->get_visible_renewal_order_ids( $renewal_ids );
 			$back_url        = wc_get_account_endpoint_url( 'megurio-subscriptions' );
 			$subscription    = wc_get_order( $subscription_id );
 			$runtime_status  = $this->get_subscription_runtime_status( $subscription_id );
@@ -1081,27 +1293,32 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		<?php if ( in_array( $status, array( 'pending', 'active', 'on-hold' ), true ) ) : ?>
 			<h3 class="megurio-account-heading"><?php esc_html_e( 'Manage Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
 			<div class="megurio-subscription-actions">
-				<?php if ( 'active' === $status ) : ?>
-					<form method="post" action="" style="display:inline">
-						<?php wp_nonce_field( 'megurio_front_pause_subscription' ); ?>
-						<input type="hidden" name="megurio_front_action" value="pause_subscription" />
+				<div class="megurio-subscription-actions__primary">
+					<?php if ( 'active' === $status && ! $this->has_unpaid_renewal_order( $subscription_id ) ) : ?>
+						<form method="post" action="" class="megurio-subscription-action-form">
+							<?php wp_nonce_field( 'megurio_front_pause_subscription' ); ?>
+							<input type="hidden" name="megurio_front_action" value="pause_subscription" />
+							<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
+							<button type="submit" class="button megurio-button-secondary"><?php esc_html_e( 'Pause This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
+						</form>
+					<?php elseif ( 'on-hold' === $status && $this->can_customer_resume_subscription( $subscription_id ) ) : ?>
+						<form method="post" action="" class="megurio-subscription-action-form">
+							<?php wp_nonce_field( 'megurio_front_resume_subscription' ); ?>
+							<input type="hidden" name="megurio_front_action" value="resume_subscription" />
+							<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
+							<button type="submit" class="button button-primary megurio-button-primary"><?php esc_html_e( 'Resume This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
+						</form>
+					<?php endif; ?>
+				</div>
+				<div class="megurio-subscription-actions__danger">
+					<form method="post" action="" class="megurio-cancel-subscription-form" data-confirm="<?php esc_attr_e( 'Cancelling this subscription is final and cannot be undone. Do you want to continue?', 'megurio-subscriptions-for-woocommerce' ); ?>">
+						<?php wp_nonce_field( 'megurio_front_cancel_subscription' ); ?>
+						<input type="hidden" name="megurio_front_action" value="cancel_subscription" />
 						<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
-						<button type="submit" class="button"><?php esc_html_e( 'Pause This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
+						<button type="submit" class="button megurio-button-danger" aria-describedby="megurio-cancel-help-<?php echo esc_attr( $subscription_id ); ?>"><?php esc_html_e( 'Cancel This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
+						<span id="megurio-cancel-help-<?php echo esc_attr( $subscription_id ); ?>" class="megurio-subscription-actions__help"><?php esc_html_e( 'Cancellation is final and cannot be undone.', 'megurio-subscriptions-for-woocommerce' ); ?></span>
 					</form>
-				<?php elseif ( 'on-hold' === $status ) : ?>
-					<form method="post" action="" style="display:inline">
-						<?php wp_nonce_field( 'megurio_front_resume_subscription' ); ?>
-						<input type="hidden" name="megurio_front_action" value="resume_subscription" />
-						<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
-						<button type="submit" class="button button-primary"><?php esc_html_e( 'Resume This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
-					</form>
-				<?php endif; ?>
-				<form method="post" action="" style="display:inline">
-					<?php wp_nonce_field( 'megurio_front_cancel_subscription' ); ?>
-					<input type="hidden" name="megurio_front_action" value="cancel_subscription" />
-					<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
-					<button type="submit" class="button"><?php esc_html_e( 'Cancel This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
-				</form>
+				</div>
 			</div>
 
 			<?php
@@ -1161,7 +1378,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 									#<?php echo esc_html( $renewal_id ); ?>
 								<?php endif; ?>
 							</td>
-								<td data-title="<?php esc_attr_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order ? esc_html( wc_get_order_status_name( $renewal_order->get_status() ) ) : '-'; ?></td>
+								<td data-title="<?php esc_attr_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order ? wp_kses_post( $this->render_order_business_status( $renewal_order ) ) : '-'; ?></td>
 							<td data-title="<?php esc_attr_e( 'Total', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order ? wp_kses_post( $renewal_order->get_formatted_order_total() ) : '-'; ?></td>
 						</tr>
 					<?php endforeach; ?>
@@ -1398,11 +1615,11 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
-		throw new Exception( __( 'Please create an account or log in before purchasing a subscription. Subscriptions require a customer account for automatic renewal.', 'megurio-subscriptions-for-woocommerce' ) );
+		throw new Exception( __( 'Please create an account or log in before purchasing a subscription. Subscriptions require a customer account for renewal management.', 'megurio-subscriptions-for-woocommerce' ) );
 	}
 
 	/**
-	 * 定期購入商品購入時の支払い方法を Stripe 公式プラグインのカード決済に制限します。
+	 * 定期購入商品購入時の支払い方法を、自動課金または手動更新に対応するものに制限します。
 	 *
 	 * @param array $available_gateways 利用可能な決済ゲートウェイ。
 	 * @return array
@@ -1417,12 +1634,15 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		// 定期購入で使用できるゲートウェイ。
-		// 自動更新に使える保存済み Stripe カードを作成できるゲートウェイのみ許可する。
+		// Stripe は自動課金、WooCommerce 標準 BACS は各回の手動銀行振込として扱う。
 		// ─────────────────────────────────────────────────────────────────
 		// 自動課金対応ゲートウェイは Megurio_Payment_Gateway_Integration::AUTO_CHARGE_GATEWAYS
-		// で管理しています。現在は Stripe 公式プラグインのみ許可します。
+		// と MANUAL_RENEWAL_GATEWAYS で管理します。
 		// ─────────────────────────────────────────────────────────────────
-		$allowed_gateways = Megurio_Payment_Gateway_Integration::AUTO_CHARGE_GATEWAYS;
+		$allowed_gateways = array_merge(
+			Megurio_Payment_Gateway_Integration::AUTO_CHARGE_GATEWAYS,
+			Megurio_Payment_Gateway_Integration::MANUAL_RENEWAL_GATEWAYS
+		);
 
 		foreach ( $available_gateways as $gateway_id => $gateway ) {
 			if ( ! in_array( $gateway_id, $allowed_gateways, true ) ) {
@@ -1434,8 +1654,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return $available_gateways;
 		}
 
-		if ( function_exists( 'wc_has_notice' ) && ! wc_has_notice( __( 'Please enable Stripe card payment for subscription products.', 'megurio-subscriptions-for-woocommerce' ), 'error' ) ) {
-			wc_add_notice( __( 'Please enable Stripe card payment for subscription products.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
+		if ( function_exists( 'wc_has_notice' ) && ! wc_has_notice( __( 'Please enable Stripe card payment or direct bank transfer for subscription products.', 'megurio-subscriptions-for-woocommerce' ), 'error' ) ) {
+			wc_add_notice( __( 'Please enable Stripe card payment or direct bank transfer for subscription products.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
 		}
 
 		return array();
@@ -1650,7 +1870,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	}
 
 	/**
-	 * Checkout 送信時の念のためのチェック。定期購入では card 以外を拒否します。
+	 * Checkout 送信時の念のためのチェック。定期購入では Stripe card または BACS のみ許可します。
 	 *
 	 * @return void
 	 */
@@ -1660,8 +1880,13 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		$gateway_id = $this->get_posted_scalar_value( 'payment_method' );
-		if ( ! in_array( $gateway_id, Megurio_Payment_Gateway_Integration::AUTO_CHARGE_GATEWAYS, true ) ) {
-			wc_add_notice( __( 'Only Stripe card payment is available for subscriptions.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
+		if ( ! $this->gateway_integration->is_subscription_gateway( $gateway_id ) ) {
+			wc_add_notice( __( 'Only Stripe card payment or direct bank transfer is available for subscriptions.', 'megurio-subscriptions-for-woocommerce' ), 'error' );
+			return;
+		}
+
+		// BACS はカード情報を使わないため、Stripe 固有の支払い種別検証を行わない。
+		if ( $this->gateway_integration->is_manual_renewal_gateway( $gateway_id ) ) {
 			return;
 		}
 
@@ -1986,7 +2211,20 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
-		if ( 'yes' === $this->get_object_meta( $order_id, '_megurio_has_subscription' ) ) {
+		$lock_token = $this->acquire_processing_lock( 'subscription-create', $order_id );
+		if ( ! $lock_token ) {
+			return;
+		}
+
+		try {
+		// 其他进程可能刚刚完成创建；锁内强制重读元数据，不能复用进程启动时的订单缓存。
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order ) {
+			return;
+		}
+		$order->read_meta_data( true );
+
+		if ( 'yes' === $order->get_meta( '_megurio_has_subscription', true ) ) {
 			return;
 		}
 
@@ -1996,7 +2234,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		if ( ! $order->get_customer_id() && $this->order_has_subscription_product( $order ) ) {
-			$order->add_order_note( __( 'Subscription record was not created because this order has no customer account. Subscriptions require a registered WooCommerce customer for automatic renewal.', 'megurio-subscriptions-for-woocommerce' ) );
+			$order->add_order_note( __( 'Subscription record was not created because this order has no customer account. Subscriptions require a registered WooCommerce customer for renewal management.', 'megurio-subscriptions-for-woocommerce' ) );
 			return;
 		}
 
@@ -2019,6 +2257,9 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		if ( $created ) {
 			$this->update_object_meta( $order_id, '_megurio_has_subscription', 'yes' );
+		}
+		} finally {
+			$this->release_processing_lock( 'subscription-create', $order_id, $lock_token );
 		}
 	}
 
@@ -2081,11 +2322,13 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			'_megurio_product_name'        => $product->get_name(),
 			'_megurio_payment_method'      => $order->get_payment_method(),
 			'_megurio_payment_method_title' => $order->get_payment_method_title(),
+			'_megurio_collection_method'   => $this->gateway_integration->get_collection_method( $order->get_payment_method() ),
 			'_megurio_product_qty'         => $item->get_quantity(),
 			'_megurio_interval_count'      => max( 1, absint( $this->get_product_meta( $meta_product_id, '_megurio_interval_count' ) ) ),
 			'_megurio_interval_unit'       => $this->get_product_meta( $meta_product_id, '_megurio_interval_unit' ),
 			'_megurio_signup_fee'          => (float) $this->get_product_meta( $meta_product_id, '_megurio_signup_fee' ),
-			'_megurio_subscription_status' => 'pending',
+			'_megurio_subscription_status' => self::STATUS_PENDING,
+			'_megurio_hold_reason'         => '',
 			'_megurio_schedule_start'      => 0,
 			'_megurio_next_payment'        => 0,
 			'_megurio_last_renewal_order'  => 0,
@@ -2132,8 +2375,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		if ( in_array( $new_status, array( 'processing', 'completed' ), true ) ) {
 			$this->activate_pending_subscriptions( $order );
-		} elseif ( 'cancelled' === $new_status ) {
-			$this->cancel_parent_order_subscriptions( $order );
+		} elseif ( in_array( $new_status, array( 'cancelled', 'refunded' ), true ) ) {
+			$this->cancel_parent_order_subscriptions( $order, $new_status );
 		}
 	}
 
@@ -2144,23 +2387,26 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	protected function activate_pending_subscriptions( WC_Order $order ) {
-		$subscription_ids = $this->get_subscription_ids_by_parent_order( $order->get_id(), array( 'pending' ) );
+		$subscription_ids = $this->get_subscription_ids_by_parent_order( $order->get_id(), array( self::STATUS_PENDING ) );
 
 		if ( empty( $subscription_ids ) ) {
 			return;
 		}
 
-		$current_time = current_time( 'timestamp' );
+		$current_time = $this->get_current_timestamp();
 
 		foreach ( $subscription_ids as $subscription_id ) {
 			$next_payment = $this->calculate_next_payment( $subscription_id, $current_time );
 
 			$this->set_subscription_meta( $subscription_id, array(
-				'_megurio_subscription_status' => 'active',
+				'_megurio_subscription_status' => self::STATUS_ACTIVE,
+				'_megurio_hold_reason'         => '',
 				'_megurio_schedule_start'      => $current_time,
 				'_megurio_next_payment'        => $next_payment,
 				'_megurio_payment_method'      => $order->get_payment_method(),
 				'_megurio_payment_method_title' => $order->get_payment_method_title(),
+				'_megurio_collection_method'   => $this->gateway_integration->get_collection_method( $order->get_payment_method() ),
+				'_megurio_pending_renewal_due_at' => 0,
 			) );
 
 			// 自動課金ゲートウェイの場合、将来の更新課金に使う決済トークンを保存する。
@@ -2198,8 +2444,53 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
+		$subscription_status = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
+		if ( self::STATUS_CANCELLED === $subscription_status ) {
+			$this->cancel_renewal_retries( $renewal_order->get_id() );
+
+			// キャンセル後に遅れて入金通知・管理操作が届いても、契約を勝手に再開しない。
+			if ( in_array( $new_status, array( 'processing', 'completed' ), true ) ) {
+				$subscription = wc_get_order( $subscription_id );
+				if ( $subscription instanceof WC_Order ) {
+					$subscription->add_order_note( sprintf( __( 'Payment for renewal order #%d was received after cancellation. The subscription remains cancelled.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order->get_id() ) );
+				}
+				$renewal_order->add_order_note( __( 'The linked subscription was already cancelled, so this payment did not reactivate it.', 'megurio-subscriptions-for-woocommerce' ) );
+			}
+
+			return;
+		}
+
+		$latest_renewal_id = absint( $this->get_object_meta( $subscription_id, '_megurio_last_renewal_order' ) );
+		if ( $latest_renewal_id && $latest_renewal_id !== $renewal_order->get_id() ) {
+			$this->cancel_renewal_retries( $renewal_order->get_id() );
+
+			// 古い請求書への遅延通知で現在の契約期間を巻き戻さない。
+			if ( in_array( $new_status, array( 'processing', 'completed' ), true ) ) {
+				$subscription = wc_get_order( $subscription_id );
+				if ( $subscription instanceof WC_Order ) {
+					$subscription->add_order_note( sprintf( __( 'Payment for superseded renewal order #%1$d was recorded, but the current schedule remains based on renewal order #%2$d.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order->get_id(), $latest_renewal_id ) );
+				}
+				$renewal_order->add_order_note( sprintf( __( 'This is an older renewal order. Payment was recorded, but it did not change the current subscription schedule (latest renewal #%d).', 'megurio-subscriptions-for-woocommerce' ), $latest_renewal_id ) );
+			}
+
+			return;
+		}
+
 		if ( 'failed' === $new_status ) {
 			$subscription = wc_get_order( $subscription_id );
+			if ( $this->gateway_integration->is_manual_renewal_gateway( $renewal_order->get_payment_method() ) ) {
+				$this->cancel_renewal_retries( $renewal_order->get_id() );
+				$this->set_subscription_meta( $subscription_id, array(
+					'_megurio_subscription_status' => self::STATUS_ON_HOLD,
+					'_megurio_hold_reason'         => self::HOLD_REASON_BANK_TRANSFER_PENDING,
+					'_megurio_next_payment'        => 0,
+				) );
+				if ( $subscription instanceof WC_Order ) {
+					$subscription->add_order_note( sprintf( __( 'Bank transfer renewal order #%d is still unpaid. No automatic payment retry was scheduled.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order->get_id() ) );
+				}
+				return;
+			}
+
 			if ( ! $this->gateway_integration->is_auto_charge_gateway( $renewal_order->get_payment_method() ) ) {
 				$this->pause_subscription_for_unsupported_payment_method( $subscription_id, $renewal_order->get_payment_method() );
 				if ( $subscription instanceof WC_Order ) {
@@ -2211,6 +2502,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			if ( $subscription instanceof WC_Order ) {
 				$subscription->add_order_note( sprintf( __( 'Renewal order #%d payment failed. Subscription remains active during grace period.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order->get_id() ) );
 			}
+
+			$this->update_object_meta( $subscription_id, '_megurio_hold_reason', self::HOLD_REASON_PAYMENT_RETRYING );
 
 			$this->handle_renewal_payment_retry( $renewal_order, $subscription_id );
 
@@ -2226,6 +2519,25 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
+		if ( 'refunded' === $new_status ) {
+			$this->cancel_renewal_retries( $renewal_order->get_id() );
+			$this->set_subscription_meta( $subscription_id, array(
+				'_megurio_subscription_status'    => self::STATUS_ON_HOLD,
+				'_megurio_hold_reason'            => self::HOLD_REASON_RENEWAL_REFUNDED,
+				'_megurio_next_payment'           => 0,
+				'_megurio_pending_renewal_due_at' => 0,
+				'_megurio_paused_at'              => 0,
+				'_megurio_paused_remaining'       => 0,
+			) );
+
+			$subscription = wc_get_order( $subscription_id );
+			if ( $subscription instanceof WC_Order ) {
+				$subscription->add_order_note( sprintf( __( 'Renewal order #%d was fully refunded. Subscription is on hold until an administrator resumes or cancels it.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order->get_id() ) );
+			}
+
+			return;
+		}
+
 		if ( in_array( $new_status, array( 'processing', 'completed' ), true ) ) {
 			// 支払い成功：スケジュール済みのリトライをすべてキャンセルする。
 			$this->cancel_renewal_retries( $renewal_order->get_id() );
@@ -2233,13 +2545,16 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			// order-pay 画面で新しいカードが使われた場合、次回以降の自動更新用トークンを更新する。
 			$this->gateway_integration->save_payment_token_from_order( $subscription_id, $renewal_order );
 
-			$current_status = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
-			$current_time = current_time( 'timestamp' );
-			$next_payment = $this->calculate_next_payment( $subscription_id, $current_time );
+			$current_status   = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
+			$scheduled_due_at = (int) $renewal_order->get_meta( '_megurio_scheduled_due_at', true );
+			$schedule_base    = $scheduled_due_at > 0 ? $scheduled_due_at : $this->get_current_timestamp();
+			$next_payment     = $this->calculate_next_payment( $subscription_id, $schedule_base );
 
 			$this->set_subscription_meta( $subscription_id, array(
-				'_megurio_subscription_status' => 'active',
+				'_megurio_subscription_status' => self::STATUS_ACTIVE,
+				'_megurio_hold_reason'         => '',
 				'_megurio_next_payment'        => $next_payment,
+				'_megurio_pending_renewal_due_at' => 0,
 			) );
 
 			$subscription = wc_get_order( $subscription_id );
@@ -2258,25 +2573,35 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	}
 
 	/**
-	 * 親注文がキャンセルされたら関連定期購入もキャンセルします。
+	 * 親注文がキャンセルまたは全額返金されたら関連定期購入もキャンセルします。
 	 *
-	 * @param WC_Order $order 親注文。
+	 * @param WC_Order $order        親注文。
+	 * @param string   $order_status 親注文の変更後ステータス。
 	 * @return void
 	 */
-	protected function cancel_parent_order_subscriptions( WC_Order $order ) {
+	protected function cancel_parent_order_subscriptions( WC_Order $order, $order_status = 'cancelled' ) {
 		$subscription_ids = $this->get_subscription_ids_by_parent_order( $order->get_id(), array( 'pending', 'active', 'on-hold' ) );
 
 		foreach ( $subscription_ids as $subscription_id ) {
 			$this->set_subscription_meta( $subscription_id, array(
-				'_megurio_subscription_status' => 'cancelled',
+				'_megurio_subscription_status' => self::STATUS_CANCELLED,
+				'_megurio_hold_reason'         => '',
 				'_megurio_next_payment'        => 0,
+				'_megurio_pending_renewal_due_at' => 0,
+				'_megurio_paused_at'           => 0,
+				'_megurio_paused_remaining'    => 0,
 			) );
+			$this->cancel_subscription_renewal_retries( $subscription_id );
 
 			$subscription = wc_get_order( $subscription_id );
 			if ( $subscription instanceof WC_Order ) {
-				$subscription->add_order_note( __( 'Subscription cancelled because parent order was cancelled.', 'megurio-subscriptions-for-woocommerce' ) );
+				$subscription->add_order_note(
+					'refunded' === $order_status
+						? __( 'Subscription cancelled because parent order was fully refunded.', 'megurio-subscriptions-for-woocommerce' )
+						: __( 'Subscription cancelled because parent order was cancelled.', 'megurio-subscriptions-for-woocommerce' )
+				);
 			}
-			$this->send_subscription_cancel_email( $subscription_id, 'parent-order' );
+			$this->send_subscription_cancel_email( $subscription_id, 'refunded' === $order_status ? 'parent-order-refund' : 'parent-order' );
 		}
 	}
 
@@ -2301,7 +2626,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			$renewal_order->update_meta_data( '_megurio_retry_count', $retry_count );
 			$renewal_order->save();
 
-			$this->schedule_renewal_retry( $renewal_order->get_id(), $interval_days );
+			$this->schedule_renewal_retry( $renewal_order->get_id(), $interval_days, $retry_count );
 			$this->send_renewal_payment_failed_email( $renewal_order, $retry_count, $interval_days );
 
 			$renewal_order->add_order_note( sprintf(
@@ -2316,7 +2641,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			$renewal_order->save();
 
 			$this->set_subscription_meta( $subscription_id, array(
-				'_megurio_subscription_status' => 'on-hold',
+				'_megurio_subscription_status' => self::STATUS_ON_HOLD,
+				'_megurio_hold_reason'         => self::HOLD_REASON_RETRY_EXHAUSTED,
 				'_megurio_next_payment'        => 0,
 			) );
 
@@ -2339,14 +2665,18 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 *
 	 * @param int $renewal_order_id 更新注文 ID。
 	 * @param int $interval_days    次回リトライまでの日数。
+	 * @param int $retry_generation リトライ世代番号。
 	 * @return void
 	 */
-	protected function schedule_renewal_retry( $renewal_order_id, $interval_days ) {
-		$timestamp = current_time( 'timestamp' ) + ( absint( $interval_days ) * DAY_IN_SECONDS );
-		$args      = array( absint( $renewal_order_id ) );
+	protected function schedule_renewal_retry( $renewal_order_id, $interval_days, $retry_generation ) {
+		$timestamp = $this->get_current_timestamp() + ( absint( $interval_days ) * DAY_IN_SECONDS );
+		$args      = array( absint( $renewal_order_id ), absint( $retry_generation ) );
+
+		// 同じ失敗遷移が重複して届いても、同一注文の再課金タスクは常に 1 件だけにする。
+		$this->cancel_renewal_retries( $renewal_order_id );
 
 		if ( class_exists( 'ActionScheduler' ) && function_exists( 'as_schedule_single_action' ) ) {
-			as_schedule_single_action( $timestamp, self::ACTION_RETRY_RENEWAL, $args );
+			as_schedule_single_action( $timestamp, self::ACTION_RETRY_RENEWAL, $args, '', true );
 		} else {
 			wp_schedule_single_event( $timestamp, self::ACTION_RETRY_RENEWAL, $args );
 		}
@@ -2359,12 +2689,32 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	protected function cancel_renewal_retries( $renewal_order_id ) {
-		$args = array( absint( $renewal_order_id ) );
+		$args_sets = array( array( absint( $renewal_order_id ) ) );
+		for ( $generation = 1; $generation <= self::RENEWAL_MAX_RETRIES; $generation++ ) {
+			$args_sets[] = array( absint( $renewal_order_id ), $generation );
+		}
 
-		if ( class_exists( 'ActionScheduler' ) && function_exists( 'as_unschedule_all_actions' ) ) {
-			as_unschedule_all_actions( self::ACTION_RETRY_RENEWAL, $args );
-		} else {
-			wp_clear_scheduled_hook( self::ACTION_RETRY_RENEWAL, $args );
+		foreach ( $args_sets as $args ) {
+			if ( class_exists( 'ActionScheduler' ) && function_exists( 'as_unschedule_all_actions' ) ) {
+				as_unschedule_all_actions( self::ACTION_RETRY_RENEWAL, $args );
+			} else {
+				wp_clear_scheduled_hook( self::ACTION_RETRY_RENEWAL, $args );
+			}
+		}
+	}
+
+	/**
+	 * 定期購入に紐づくすべての更新注文について、予約済みリトライを解除します。
+	 *
+	 * @param int $subscription_id 定期購入 ID。
+	 * @return void
+	 */
+	protected function cancel_subscription_renewal_retries( $subscription_id ) {
+		$renewal_ids = $this->get_object_meta( $subscription_id, '_megurio_renewal_order_ids' );
+		$renewal_ids = is_array( $renewal_ids ) ? $renewal_ids : array();
+
+		foreach ( array_unique( array_filter( array_map( 'absint', $renewal_ids ) ) ) as $renewal_order_id ) {
+			$this->cancel_renewal_retries( $renewal_order_id );
 		}
 	}
 
@@ -2375,40 +2725,72 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * 結果は woocommerce_order_status_changed 経由で通常フローに戻ります。
 	 *
 	 * @param int $renewal_order_id 更新注文 ID。
+	 * @param int $retry_generation 予約時点のリトライ世代。旧タスクでは 0。
 	 * @return void
 	 */
-	public function run_retry_renewal_payment( $renewal_order_id ) {
+	public function run_retry_renewal_payment( $renewal_order_id, $retry_generation = 0 ) {
 		$renewal_order = wc_get_order( absint( $renewal_order_id ) );
 		if ( ! $renewal_order instanceof WC_Order ) {
 			return;
 		}
 
-		if ( 'yes' === $renewal_order->get_meta( '_megurio_retry_exhausted', true ) ) {
+		$lock_token = $this->acquire_processing_lock( 'renewal-payment', $renewal_order->get_id() );
+		if ( ! $lock_token ) {
 			return;
 		}
+
+		try {
+			// ロック待ちの間に状態が変わり得るため、最新の注文を読み直す。
+			$renewal_order = wc_get_order( $renewal_order->get_id() );
+			if ( ! $renewal_order instanceof WC_Order || 'failed' !== $renewal_order->get_status() ) {
+				return;
+			}
+
+			if ( 'yes' === $renewal_order->get_meta( '_megurio_retry_exhausted', true ) ) {
+				return;
+			}
 
 		// すでに支払い済み・キャンセル済み・返金済みの注文は再課金しない。
 		// 手動支払いや ActionScheduler の競合で二重課金が発生するのを防ぐ。
-		if ( in_array( $renewal_order->get_status(), array( 'processing', 'completed', 'cancelled', 'refunded' ), true ) ) {
-			$this->cancel_renewal_retries( $renewal_order->get_id() );
-			return;
-		}
+			$subscription_id = absint( $renewal_order->get_meta( '_megurio_subscription_id', true ) );
+			if ( 'active' !== (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' ) ) {
+				$this->cancel_renewal_retries( $renewal_order->get_id() );
+				return;
+			}
 
-		$retry_count = (int) $renewal_order->get_meta( '_megurio_retry_count', true );
+			$latest_renewal_id = absint( $this->get_object_meta( $subscription_id, '_megurio_last_renewal_order' ) );
+			if ( ( $latest_renewal_id && $latest_renewal_id !== $renewal_order->get_id() )
+				|| ! $this->gateway_integration->is_auto_charge_gateway( $renewal_order->get_payment_method() )
+			) {
+				$this->cancel_renewal_retries( $renewal_order->get_id() );
+				return;
+			}
+
+			$retry_count = (int) $renewal_order->get_meta( '_megurio_retry_count', true );
+			if ( $retry_generation > 0 && (int) $retry_generation !== $retry_count ) {
+				return;
+			}
+			$attempted_retry_count = (int) $renewal_order->get_meta( '_megurio_retry_last_attempted_count', true );
+			if ( $retry_count <= 0 || $attempted_retry_count >= $retry_count ) {
+				return;
+			}
+			$renewal_order->update_meta_data( '_megurio_retry_last_attempted_count', $retry_count );
 
 		// 再試行のため注文を保留中にリセットする。
 		// これにより自動決済処理が再度課金を試みられる状態になる。
-		$renewal_order->set_status( 'pending' );
-		$renewal_order->add_order_note( sprintf(
+			$renewal_order->set_status( 'pending' );
+			$renewal_order->add_order_note( sprintf(
 			/* translators: 1: current retry count, 2: max retries */
 			__( 'Starting auto-retry (%1$d/%2$d).', 'megurio-subscriptions-for-woocommerce' ),
 			$retry_count,
 			self::RENEWAL_MAX_RETRIES
-		) );
-		$renewal_order->save();
+			) );
+			$renewal_order->save();
 
-		$subscription_id = absint( $renewal_order->get_meta( '_megurio_subscription_id', true ) );
-		$this->gateway_integration->process_renewal_payment( $subscription_id, $renewal_order );
+			$this->gateway_integration->process_renewal_payment( $subscription_id, $renewal_order );
+		} finally {
+			$this->release_processing_lock( 'renewal-payment', $renewal_order_id, $lock_token );
+		}
 	}
 
 	/**
@@ -2417,7 +2799,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return void
 	 */
 	public function run_renewal_scheduler() {
-		$current_time = current_time( 'timestamp' );
+		$current_time = $this->get_current_timestamp();
 		$processed    = 0;
 
 		$subscription_ids = wc_get_orders(
@@ -2451,12 +2833,25 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		);
 
 		foreach ( $subscription_ids as $subscription_id ) {
-			if ( $this->has_unpaid_renewal_order( $subscription_id ) ) {
+			$lock_token = $this->acquire_processing_lock( 'renewal-create', $subscription_id );
+			if ( ! $lock_token ) {
 				continue;
 			}
 
-			if ( $this->create_renewal_order( $subscription_id, $current_time ) ) {
-				$processed++;
+			try {
+				// 複数 Cron が同時起動しても、ロック取得後の最新状態で再判定する。
+				$subscription = wc_get_order( $subscription_id );
+				$status       = $subscription instanceof WC_Order ? (string) $subscription->get_meta( '_megurio_subscription_status', true ) : '';
+				$next_payment = $subscription instanceof WC_Order ? (int) $subscription->get_meta( '_megurio_next_payment', true ) : 0;
+				if ( 'active' !== $status || $next_payment <= 0 || $next_payment > $current_time || $this->has_unpaid_renewal_order( $subscription_id ) ) {
+					continue;
+				}
+
+				if ( $this->create_renewal_order( $subscription_id, $current_time ) ) {
+					$processed++;
+				}
+			} finally {
+				$this->release_processing_lock( 'renewal-create', $subscription_id, $lock_token );
 			}
 		}
 
@@ -2479,6 +2874,30 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	}
 
 	/**
+	 * 顧客自身が一時停止した契約だけを、顧客が再開できるようにします。
+	 *
+	 * 決済失敗・銀行振込待ちによる on-hold は、注文の入金確認を経ずに再開できません。
+	 *
+	 * @param int $subscription_id 定期購入 ID。
+	 * @return bool
+	 */
+	protected function can_customer_resume_subscription( $subscription_id ) {
+		if ( self::STATUS_ON_HOLD !== (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' ) ) {
+			return false;
+		}
+
+		if ( self::HOLD_REASON_CUSTOMER_PAUSED !== (string) $this->get_object_meta( $subscription_id, '_megurio_hold_reason' ) ) {
+			return false;
+		}
+
+		if ( (int) $this->get_object_meta( $subscription_id, '_megurio_pending_renewal_due_at' ) > 0 ) {
+			return false;
+		}
+
+		return ! $this->has_unpaid_renewal_order( $subscription_id );
+	}
+
+	/**
 	 * 対応外の支払い方法が設定された定期購入を停止します。
 	 *
 	 * @param int    $subscription_id 定期購入 ID。
@@ -2487,7 +2906,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 */
 	protected function pause_subscription_for_unsupported_payment_method( $subscription_id, $payment_method = '' ) {
 		$this->set_subscription_meta( $subscription_id, array(
-			'_megurio_subscription_status' => 'on-hold',
+			'_megurio_subscription_status' => self::STATUS_ON_HOLD,
+			'_megurio_hold_reason'         => self::HOLD_REASON_UNSUPPORTED_PAYMENT_METHOD,
 			'_megurio_next_payment'        => 0,
 		) );
 
@@ -2495,7 +2915,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		if ( $subscription instanceof WC_Order ) {
 			$subscription->add_order_note( sprintf(
 				/* translators: %s: payment method ID */
-				__( 'Payment method %s is not supported for subscriptions and has been paused. Please change to Stripe card payment.', 'megurio-subscriptions-for-woocommerce' ),
+				__( 'Payment method %s is not supported for subscriptions and has been paused. Please change to Stripe card payment or direct bank transfer.', 'megurio-subscriptions-for-woocommerce' ),
 				$payment_method ? $payment_method : '-'
 			) );
 		}
@@ -2665,6 +3085,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				'description'                => __( 'No unpaid renewal orders.', 'megurio-subscriptions-for-woocommerce' ),
 				'is_grace_period'            => false,
 				'is_unpaid_renewal'          => false,
+				'is_manual_renewal'          => false,
 				'grace_remaining_label'      => '-',
 				'grace_expires_at'           => 0,
 				'retry_label'                => '-',
@@ -2680,16 +3101,22 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				'renewal_order_timestamp'    => 0,
 			);
 
-		if ( 'pending' === $subscription_status ) {
+		if ( self::STATUS_PENDING === $subscription_status ) {
 			$runtime_status['label']       = __( 'Pending', 'megurio-subscriptions-for-woocommerce' );
 			$runtime_status['description'] = __( 'Waiting for initial order confirmation.', 'megurio-subscriptions-for-woocommerce' );
-		} elseif ( 'on-hold' === $subscription_status ) {
+		} elseif ( self::STATUS_ON_HOLD === $subscription_status ) {
+			$hold_copy                     = $this->get_hold_reason_runtime_copy( $subscription_id );
 			$runtime_status['label']       = __( 'On Hold', 'megurio-subscriptions-for-woocommerce' );
-			$runtime_status['description'] = __( 'Auto-charging is paused.', 'megurio-subscriptions-for-woocommerce' );
-		} elseif ( 'cancelled' === $subscription_status ) {
+			$runtime_status['description'] = $hold_copy['description'];
+			$runtime_status['notice']      = $hold_copy['notice'];
+		} elseif ( self::STATUS_CANCELLED === $subscription_status ) {
 			$runtime_status['label']       = __( 'Cancelled', 'megurio-subscriptions-for-woocommerce' );
 			$runtime_status['description'] = __( 'No further auto-charging.', 'megurio-subscriptions-for-woocommerce' );
-		} elseif ( 'active' !== $subscription_status ) {
+
+			// キャンセルは終端状態。最後の更新注文に失敗・リトライ情報が残っていても、
+			// 現在の運用状態や将来のリトライ予定として表示しない。
+			return $runtime_status;
+		} elseif ( self::STATUS_ACTIVE !== $subscription_status ) {
 			$runtime_status['label']       = $subscription_status ? $subscription_status : '-';
 			$runtime_status['description'] = '';
 		}
@@ -2702,14 +3129,18 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$renewal_status       = $renewal_order->get_status();
 		$retry_count          = (int) $renewal_order->get_meta( '_megurio_retry_count', true );
 		$retry_exhausted      = 'yes' === $renewal_order->get_meta( '_megurio_retry_exhausted', true );
+		$is_manual_renewal    = 'manual' === (string) $renewal_order->get_meta( '_megurio_collection_method', true )
+			|| $this->gateway_integration->is_manual_renewal_gateway( $renewal_order->get_payment_method() );
 		$next_retry_timestamp = $this->get_next_renewal_retry_timestamp( $renewal_order_id );
 		$grace_expires_at     = $this->get_grace_period_expires_at( $next_retry_timestamp, $retry_count );
 		$is_unpaid_renewal    = ! in_array( $renewal_status, array( 'processing', 'completed', 'cancelled', 'refunded' ), true );
 
 		$runtime_status['renewal_order_id']           = $renewal_order_id;
 		$runtime_status['renewal_order_status']       = $renewal_status;
-		$runtime_status['renewal_order_status_label'] = wc_get_order_status_name( $renewal_status );
+		$order_business_status = $this->get_order_business_status( $renewal_order );
+		$runtime_status['renewal_order_status_label'] = $order_business_status['label'];
 		$runtime_status['is_unpaid_renewal']          = $is_unpaid_renewal;
+		$runtime_status['is_manual_renewal']          = $is_manual_renewal;
 		$runtime_status['retry_count']                = $retry_count;
 		$runtime_status['retry_exhausted']            = $retry_exhausted;
 		$runtime_status['next_retry_timestamp']       = $next_retry_timestamp;
@@ -2733,7 +3164,11 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			);
 		}
 
-		if ( $is_unpaid_renewal && 'active' === $subscription_status && $retry_count > 0 && ! $retry_exhausted ) {
+		if ( $is_unpaid_renewal && $is_manual_renewal ) {
+			$runtime_status['label']       = __( 'On Hold', 'megurio-subscriptions-for-woocommerce' );
+			$runtime_status['description'] = sprintf( __( 'Waiting for bank transfer confirmation for renewal order #%d.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order_id );
+			$runtime_status['notice']      = __( 'No automatic retry will run. The subscription resumes when the order is marked Processing or Completed.', 'megurio-subscriptions-for-woocommerce' );
+		} elseif ( $is_unpaid_renewal && self::STATUS_ACTIVE === $subscription_status && $retry_count > 0 && ! $retry_exhausted ) {
 			$runtime_status['label']           = __( 'Grace Period', 'megurio-subscriptions-for-woocommerce' );
 			$runtime_status['description']     = sprintf( __( 'Renewal order #%d payment is incomplete. Service remains active.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order_id );
 			$runtime_status['is_grace_period'] = true;
@@ -2756,12 +3191,54 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			$runtime_status['label']       = __( 'On Hold', 'megurio-subscriptions-for-woocommerce' );
 			$runtime_status['description'] = sprintf( __( 'Max retries reached for renewal order #%d. Auto-charging is paused.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order_id );
 			$runtime_status['notice']      = __( 'Paused because max renewal retries were reached. Will resume when the pending order is paid.', 'megurio-subscriptions-for-woocommerce' );
-		} elseif ( $is_unpaid_renewal ) {
+		} elseif ( $is_unpaid_renewal && self::STATUS_ACTIVE === $subscription_status ) {
 			$runtime_status['description'] = sprintf( __( 'Renewal order #%d payment is incomplete.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order_id );
 			$runtime_status['notice']      = __( 'Renewal order payment is incomplete.', 'megurio-subscriptions-for-woocommerce' );
 		}
 
 		return $runtime_status;
+	}
+
+	/**
+	 * on-hold の理由に応じた説明と、次に必要な操作を返します。
+	 *
+	 * @param int $subscription_id 定期購入 ID。
+	 * @return array
+	 */
+	protected function get_hold_reason_runtime_copy( $subscription_id ) {
+		$reason = (string) $this->get_object_meta( $subscription_id, '_megurio_hold_reason' );
+		$map    = array(
+			self::HOLD_REASON_CUSTOMER_PAUSED => array(
+				'description' => __( 'Paused by the customer.', 'megurio-subscriptions-for-woocommerce' ),
+				'notice'      => __( 'The customer can resume this subscription from My Account.', 'megurio-subscriptions-for-woocommerce' ),
+			),
+			self::HOLD_REASON_ADMIN_PAUSED => array(
+				'description' => __( 'Paused by an administrator.', 'megurio-subscriptions-for-woocommerce' ),
+				'notice'      => __( 'Only an administrator can resume this subscription.', 'megurio-subscriptions-for-woocommerce' ),
+			),
+			self::HOLD_REASON_BANK_TRANSFER_PENDING => array(
+				'description' => __( 'Waiting for bank transfer confirmation.', 'megurio-subscriptions-for-woocommerce' ),
+				'notice'      => __( 'The subscription will resume after the renewal order is marked Processing or Completed.', 'megurio-subscriptions-for-woocommerce' ),
+			),
+			self::HOLD_REASON_PAYMENT_RETRYING => array(
+				'description' => __( 'Waiting for the next automatic payment retry.', 'megurio-subscriptions-for-woocommerce' ),
+				'notice'      => __( 'The customer cannot manually resume while a payment retry is pending.', 'megurio-subscriptions-for-woocommerce' ),
+			),
+			self::HOLD_REASON_RETRY_EXHAUSTED => array(
+				'description' => __( 'Automatic payment retries were exhausted.', 'megurio-subscriptions-for-woocommerce' ),
+				'notice'      => __( 'Confirm payment or cancel the unpaid order before resuming.', 'megurio-subscriptions-for-woocommerce' ),
+			),
+			self::HOLD_REASON_UNSUPPORTED_PAYMENT_METHOD => array(
+				'description' => __( 'The saved payment method does not support automatic renewal.', 'megurio-subscriptions-for-woocommerce' ),
+				'notice'      => __( 'Change the payment method before resuming.', 'megurio-subscriptions-for-woocommerce' ),
+			),
+			self::HOLD_REASON_RENEWAL_REFUNDED => array(
+				'description' => __( 'The latest renewal order was fully refunded.', 'megurio-subscriptions-for-woocommerce' ),
+				'notice'      => __( 'An administrator must explicitly resume or cancel this subscription.', 'megurio-subscriptions-for-woocommerce' ),
+			),
+		);
+
+		return isset( $map[ $reason ] ) ? $map[ $reason ] : $map[ self::HOLD_REASON_ADMIN_PAUSED ];
 	}
 
 	/**
@@ -2771,15 +3248,22 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return int
 	 */
 	protected function get_next_renewal_retry_timestamp( $renewal_order_id ) {
-		$args = array( absint( $renewal_order_id ) );
-
-		if ( function_exists( 'as_next_scheduled_action' ) ) {
-			$timestamp = as_next_scheduled_action( self::ACTION_RETRY_RENEWAL, $args );
-			return $timestamp ? (int) $timestamp : 0;
+		$args_sets = array( array( absint( $renewal_order_id ) ) );
+		for ( $generation = 1; $generation <= self::RENEWAL_MAX_RETRIES; $generation++ ) {
+			$args_sets[] = array( absint( $renewal_order_id ), $generation );
 		}
 
-		$timestamp = wp_next_scheduled( self::ACTION_RETRY_RENEWAL, $args );
-		return $timestamp ? (int) $timestamp : 0;
+		$timestamps = array();
+		foreach ( $args_sets as $args ) {
+			$timestamp = function_exists( 'as_next_scheduled_action' )
+				? as_next_scheduled_action( self::ACTION_RETRY_RENEWAL, $args )
+				: wp_next_scheduled( self::ACTION_RETRY_RENEWAL, $args );
+			if ( $timestamp ) {
+				$timestamps[] = (int) $timestamp;
+			}
+		}
+
+		return $timestamps ? min( $timestamps ) : 0;
 	}
 
 	/**
@@ -2811,7 +3295,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return string
 	 */
 	protected function format_remaining_time( $timestamp ) {
-		$remaining = (int) $timestamp - current_time( 'timestamp' );
+		$remaining = (int) $timestamp - $this->get_current_timestamp();
 		if ( $remaining <= 0 ) {
 			return __( 'soon', 'megurio-subscriptions-for-woocommerce' );
 		}
@@ -2857,10 +3341,16 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		$payment_method       = $this->get_subscription_payment_method( $subscription_id, $subscription );
 		$payment_method_title = $this->get_subscription_payment_method_title( $subscription_id, $subscription );
-		if ( ! $this->gateway_integration->is_auto_charge_gateway( $payment_method ) ) {
+		if ( ! $this->gateway_integration->is_subscription_gateway( $payment_method ) ) {
 			$this->pause_subscription_for_unsupported_payment_method( $subscription_id, $payment_method );
 			return 0;
 		}
+
+		$scheduled_due_at = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
+		if ( $scheduled_due_at <= 0 ) {
+			$scheduled_due_at = (int) $current_time;
+		}
+		$is_manual_renewal = $this->gateway_integration->is_manual_renewal_gateway( $payment_method );
 
 		$renewal_order = wc_create_order(
 			array(
@@ -2901,9 +3391,11 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$this->set_object_meta_bulk(
 			$renewal_order->get_id(),
 			array(
-				'_megurio_is_renewal_order' => 'yes',
-				'_megurio_subscription_id'  => $subscription_id,
-				'_megurio_parent_order_id'  => absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) ),
+				'_megurio_is_renewal_order'  => 'yes',
+				'_megurio_subscription_id'   => $subscription_id,
+				'_megurio_parent_order_id'   => absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) ),
+				'_megurio_scheduled_due_at'  => $scheduled_due_at,
+				'_megurio_collection_method' => $is_manual_renewal ? 'manual' : 'automatic',
 			)
 		);
 
@@ -2911,14 +3403,29 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		$renewal_ids   = is_array( $renewal_ids ) ? $renewal_ids : array();
 		$renewal_ids[] = $renewal_order->get_id();
 
-		$this->set_subscription_meta( $subscription_id, array(
-			'_megurio_last_renewal_order' => $renewal_order->get_id(),
-			'_megurio_renewal_order_ids'  => $renewal_ids,
-			'_megurio_next_payment'       => $this->calculate_next_payment( $subscription_id, $current_time ),
-		) );
+		$subscription_meta = array(
+			'_megurio_last_renewal_order'     => $renewal_order->get_id(),
+			'_megurio_renewal_order_ids'      => $renewal_ids,
+			'_megurio_collection_method'      => $is_manual_renewal ? 'manual' : 'automatic',
+			'_megurio_pending_renewal_due_at' => $is_manual_renewal ? $scheduled_due_at : 0,
+			'_megurio_next_payment'           => $is_manual_renewal ? 0 : $this->calculate_next_payment( $subscription_id, $scheduled_due_at ),
+		);
+
+		if ( $is_manual_renewal ) {
+			$subscription_meta['_megurio_subscription_status'] = self::STATUS_ON_HOLD;
+			$subscription_meta['_megurio_hold_reason']         = self::HOLD_REASON_BANK_TRANSFER_PENDING;
+		}
+
+		$this->set_subscription_meta( $subscription_id, $subscription_meta );
 
 		$subscription->add_order_note( sprintf( __( 'Renewal order #%d created.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order->get_id() ) );
 		$renewal_order->add_order_note( sprintf( __( 'This renewal order is linked to subscription #%d.', 'megurio-subscriptions-for-woocommerce' ), $subscription_id ) );
+
+		if ( $is_manual_renewal ) {
+			$subscription->add_order_note( sprintf( __( 'Subscription paused until bank transfer for renewal order #%d is confirmed.', 'megurio-subscriptions-for-woocommerce' ), $renewal_order->get_id() ) );
+			$renewal_order->update_status( 'on-hold', __( 'Awaiting bank transfer. Confirm receipt by changing this order to Processing or Completed.', 'megurio-subscriptions-for-woocommerce' ) );
+			return $renewal_order->get_id();
+		}
 
 		$this->gateway_integration->process_renewal_payment( $subscription_id, $renewal_order );
 
@@ -3420,6 +3927,70 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	}
 
 	/**
+	 * 管理者が確認すべき状態を先に、終了済みを最後に並べます。
+	 *
+	 * @param array $subscription_ids 定期購入 ID 一覧。
+	 * @return array
+	 */
+	protected function sort_admin_subscription_ids( array $subscription_ids ) {
+		$priority = array(
+			self::STATUS_ON_HOLD   => 0,
+			self::STATUS_PENDING   => 1,
+			self::STATUS_ACTIVE    => 2,
+			self::STATUS_CANCELLED => 3,
+		);
+
+		usort(
+			$subscription_ids,
+			function ( $left_id, $right_id ) use ( $priority ) {
+				$left_status   = (string) $this->get_object_meta( $left_id, '_megurio_subscription_status' );
+				$right_status  = (string) $this->get_object_meta( $right_id, '_megurio_subscription_status' );
+				$left_priority = isset( $priority[ $left_status ] ) ? $priority[ $left_status ] : 4;
+				$right_priority = isset( $priority[ $right_status ] ) ? $priority[ $right_status ] : 4;
+
+				if ( $left_priority === $right_priority ) {
+					return absint( $right_id ) <=> absint( $left_id );
+				}
+
+				return $left_priority <=> $right_priority;
+			}
+		);
+
+		return $subscription_ids;
+	}
+
+	/**
+	 * 定期購入に紐づく顧客を、一覧・詳細で読める形に整えます。
+	 *
+	 * @param int $subscription_id 定期購入 ID。
+	 * @return array
+	 */
+	protected function get_subscription_customer_display( $subscription_id ) {
+		$customer_id = absint( $this->get_object_meta( $subscription_id, '_megurio_customer_id' ) );
+		$customer    = $customer_id ? get_userdata( $customer_id ) : false;
+		$result      = array(
+			'id'    => $customer_id,
+			'name'  => '',
+			'email' => '',
+		);
+
+		if ( $customer instanceof WP_User ) {
+			$result['name']  = (string) $customer->display_name;
+			$result['email'] = (string) $customer->user_email;
+			return $result;
+		}
+
+		$parent_order_id = absint( $this->get_object_meta( $subscription_id, '_megurio_parent_order_id' ) );
+		$parent_order    = $parent_order_id ? wc_get_order( $parent_order_id ) : false;
+		if ( $parent_order instanceof WC_Order ) {
+			$result['name']  = trim( $parent_order->get_formatted_billing_full_name() );
+			$result['email'] = (string) $parent_order->get_billing_email();
+		}
+
+		return $result;
+	}
+
+	/**
 	 * マイアカウントの定期購入詳細に概要カードを表示します。
 	 *
 	 * @param int      $subscription_id 定期購入 ID。
@@ -3461,7 +4032,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				/* translators: 1: renewal order ID, 2: renewal order status */
 				__( '#%1$d / %2$s', 'megurio-subscriptions-for-woocommerce' ),
 				$last_renewal->get_id(),
-				wc_get_order_status_name( $last_renewal->get_status() )
+				$this->get_order_business_status_label( $last_renewal )
 			);
 		}
 		?>
@@ -3603,7 +4174,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				'caption' => sprintf(
 					/* translators: 1: renewal order status, 2: renewal order ID */
 					__( '%1$s #%2$d', 'megurio-subscriptions-for-woocommerce' ),
-					wc_get_order_status_name( $renewal_order->get_status() ),
+					$this->get_order_business_status_label( $renewal_order ),
 					$renewal_order->get_id()
 				),
 				'state'   => $this->get_admin_timeline_state_for_order_status( $renewal_order->get_status() ),
@@ -3708,7 +4279,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				/* translators: 1: renewal order ID, 2: renewal order status */
 				__( '#%1$d / %2$s', 'megurio-subscriptions-for-woocommerce' ),
 				$last_renewal->get_id(),
-				wc_get_order_status_name( $last_renewal->get_status() )
+				$this->get_order_business_status_label( $last_renewal )
 			);
 		}
 		?>
@@ -3791,7 +4362,9 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @param string $context        表示コンテキスト。admin または account。
 	 */
 	protected function render_payment_recovery_flow( array $runtime_status, $context = 'admin' ) {
-		if ( empty( $runtime_status['is_unpaid_renewal'] ) && empty( $runtime_status['retry_exhausted'] ) ) {
+		if ( ! empty( $runtime_status['is_manual_renewal'] )
+			|| ( empty( $runtime_status['is_unpaid_renewal'] ) && empty( $runtime_status['retry_exhausted'] ) )
+		) {
 			return;
 		}
 
@@ -3931,7 +4504,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		if ( ! $reference_timestamp ) {
-			$reference_timestamp = current_time( 'timestamp' );
+			$reference_timestamp = $this->get_current_timestamp();
 		}
 
 		$estimated_time = $reference_timestamp;
@@ -4072,7 +4645,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				'caption' => sprintf(
 					/* translators: 1: renewal order status, 2: renewal order ID */
 					__( '%1$s #%2$d', 'megurio-subscriptions-for-woocommerce' ),
-					wc_get_order_status_name( $renewal_order->get_status() ),
+					$this->get_order_business_status_label( $renewal_order ),
 					$renewal_order->get_id()
 				),
 				'state'   => $this->get_admin_timeline_state_for_order_status( $renewal_order->get_status() ),
@@ -4146,6 +4719,119 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		return 'scheduled';
+	}
+
+	/**
+	 * WooCommerce の注文状態を、Megurio 上の 5 つの業務状態へまとめます。
+	 * WooCommerce 本体の状態は決済・在庫・配送連携のため変更しません。
+	 *
+	 * @param WC_Order|string $order_or_status 注文または注文状態。
+	 * @return array
+	 */
+	protected function get_order_business_status( $order_or_status ) {
+		$order          = $order_or_status instanceof WC_Order ? $order_or_status : null;
+		$status         = $order ? $order->get_status() : (string) $order_or_status;
+		$payment_method = $order ? $order->get_payment_method() : '';
+		$result         = array(
+			'key'         => 'closed',
+			'label'       => __( 'Closed', 'megurio-subscriptions-for-woocommerce' ),
+			'detail'      => wc_get_order_status_name( $status ),
+			'hidden'      => false,
+		);
+
+		switch ( $status ) {
+			case 'checkout-draft':
+				$result['hidden'] = true;
+				break;
+			case 'pending':
+				$result['key']    = 'awaiting-payment';
+				$result['label']  = __( 'Awaiting Payment', 'megurio-subscriptions-for-woocommerce' );
+				$result['detail'] = 'bacs' === $payment_method
+					? __( 'Bank transfer not yet confirmed', 'megurio-subscriptions-for-woocommerce' )
+					: __( 'Online payment is incomplete', 'megurio-subscriptions-for-woocommerce' );
+				break;
+			case 'on-hold':
+				$result['key']    = 'awaiting-payment';
+				$result['label']  = __( 'Awaiting Payment', 'megurio-subscriptions-for-woocommerce' );
+				$result['detail'] = 'bacs' === $payment_method
+					? __( 'Bank transfer awaiting confirmation', 'megurio-subscriptions-for-woocommerce' )
+					: __( 'Payment is awaiting review', 'megurio-subscriptions-for-woocommerce' );
+				break;
+			case 'processing':
+				$result['key']    = 'paid';
+				$result['label']  = __( 'Paid', 'megurio-subscriptions-for-woocommerce' );
+				$result['detail'] = __( 'Awaiting fulfillment', 'megurio-subscriptions-for-woocommerce' );
+				break;
+			case 'completed':
+				$result['key']    = 'paid';
+				$result['label']  = __( 'Paid', 'megurio-subscriptions-for-woocommerce' );
+				$result['detail'] = __( 'Fulfillment completed', 'megurio-subscriptions-for-woocommerce' );
+				break;
+			case 'failed':
+				$result['key']    = 'failed';
+				$result['label']  = __( 'Payment Failed', 'megurio-subscriptions-for-woocommerce' );
+				$result['detail'] = __( 'Payment was not completed', 'megurio-subscriptions-for-woocommerce' );
+				break;
+			case 'cancelled':
+				$result['detail'] = __( 'No further payment will be collected', 'megurio-subscriptions-for-woocommerce' );
+				break;
+			case 'refunded':
+				$result['key']    = 'refunded';
+				$result['label']  = __( 'Refunded', 'megurio-subscriptions-for-woocommerce' );
+				$result['detail'] = __( 'Refund recorded', 'megurio-subscriptions-for-woocommerce' );
+				break;
+		}
+
+		return $result;
+	}
+
+	/**
+	 * タイムラインなど短い表示向けの業務状態ラベルを返します。
+	 *
+	 * @param WC_Order|string $order_or_status 注文または注文状態。
+	 * @return string
+	 */
+	protected function get_order_business_status_label( $order_or_status ) {
+		$status = $this->get_order_business_status( $order_or_status );
+		return $status['label'];
+	}
+
+	/**
+	 * 業務状態と WooCommerce の詳細状態を 2 段で表示します。
+	 *
+	 * @param WC_Order $order 注文。
+	 * @return string
+	 */
+	protected function render_order_business_status( WC_Order $order ) {
+		$status = $this->get_order_business_status( $order );
+		if ( $status['hidden'] ) {
+			return '';
+		}
+
+		return sprintf(
+			'<span class="megurio-business-status megurio-business-status--%1$s"><strong>%2$s</strong><small>%3$s</small></span>',
+			esc_attr( $status['key'] ),
+			esc_html( $status['label'] ),
+			esc_html( $status['detail'] )
+		);
+	}
+
+	/**
+	 * checkout-draft は Megurio の更新注文 UI から除外します。
+	 *
+	 * @param array $renewal_ids 更新注文 ID 一覧。
+	 * @return array
+	 */
+	protected function get_visible_renewal_order_ids( array $renewal_ids ) {
+		return array_values(
+			array_filter(
+				array_map( 'absint', $renewal_ids ),
+				function ( $renewal_id ) {
+					$order = wc_get_order( $renewal_id );
+					return ! $order instanceof WC_Order || 'checkout-draft' !== $order->get_status();
+				}
+			)
+		);
 	}
 
 	/**
@@ -4271,6 +4957,22 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	}
 
 	/**
+	 * 一時停止前の残り時間を保ったまま、再開後の次回請求日時を計算します。
+	 *
+	 * @param int $subscription_id 定期購入 ID。
+	 * @param int $current_time    再開時刻。
+	 * @return int
+	 */
+	protected function calculate_resumed_next_payment( $subscription_id, $current_time ) {
+		$remaining = (int) $this->get_object_meta( $subscription_id, '_megurio_paused_remaining' );
+		if ( $remaining > 0 ) {
+			return (int) $current_time + $remaining;
+		}
+
+		return $this->calculate_next_payment( $subscription_id, $current_time );
+	}
+
+	/**
 	 * 指定した間隔を時刻に加算します。
 	 *
 	 * @param int    $timestamp 基準時刻。
@@ -4279,18 +4981,86 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return int
 	 */
 	protected function add_interval_to_timestamp( $timestamp, $count, $unit ) {
-		switch ( $unit ) {
-			case 'day':
-				return strtotime( '+' . $count . ' days', $timestamp );
-			case 'week':
-				return strtotime( '+' . $count . ' weeks', $timestamp );
-			case 'month':
-				return strtotime( '+' . $count . ' months', $timestamp );
-			case 'year':
-				return strtotime( '+' . $count . ' years', $timestamp );
-			default:
-				return 0;
+		$count = max( 1, absint( $count ) );
+		if ( ! in_array( $unit, self::VALID_INTERVAL_UNITS, true ) ) {
+			return 0;
 		}
+
+		$base = ( new DateTimeImmutable( '@' . absint( $timestamp ) ) )->setTimezone( wp_timezone() );
+		$next = $base->modify( sprintf( '+%d %s', $count, $unit ) );
+
+		return $next instanceof DateTimeImmutable ? $next->getTimestamp() : 0;
+	}
+
+	/**
+	 * 現在時刻を真の UNIX タイムスタンプで返します。
+	 *
+	 * @return int
+	 */
+	protected function get_current_timestamp() {
+		return current_datetime()->getTimestamp();
+	}
+
+	/**
+	 * DB の一意制約を使って、短時間の排他ロックを取得します。
+	 *
+	 * @param string $scope     ロック用途。
+	 * @param int    $object_id 対象 ID。
+	 * @return string 取得できた場合は所有トークン、失敗時は空文字。
+	 */
+	protected function acquire_processing_lock( $scope, $object_id ) {
+		$option_name = '_megurio_lock_' . sanitize_key( $scope ) . '_' . absint( $object_id );
+		$token       = wp_generate_uuid4();
+		$value       = wp_json_encode(
+			array(
+				'created_at' => time(),
+				'token'      => $token,
+			)
+		);
+
+		if ( add_option( $option_name, $value, '', false ) ) {
+			return $token;
+		}
+
+		$existing = json_decode( (string) get_option( $option_name, '' ), true );
+		$locked_at = is_array( $existing ) && isset( $existing['created_at'] ) ? (int) $existing['created_at'] : 0;
+		if ( $locked_at > 0 && ( time() - $locked_at ) <= self::PROCESSING_LOCK_TTL ) {
+			return '';
+		}
+
+		delete_option( $option_name );
+		return add_option( $option_name, $value, '', false ) ? $token : '';
+	}
+
+	/**
+	 * 自分が所有している排他ロックだけを解放します。
+	 *
+	 * @param string $scope     ロック用途。
+	 * @param int    $object_id 対象 ID。
+	 * @param string $token     所有トークン。
+	 * @return void
+	 */
+	protected function release_processing_lock( $scope, $object_id, $token ) {
+		$option_name = '_megurio_lock_' . sanitize_key( $scope ) . '_' . absint( $object_id );
+		$existing    = json_decode( (string) get_option( $option_name, '' ), true );
+		$stored_token = is_array( $existing ) && isset( $existing['token'] ) ? (string) $existing['token'] : '';
+
+		if ( $stored_token && $token && hash_equals( $stored_token, (string) $token ) ) {
+			delete_option( $option_name );
+		}
+	}
+
+	/**
+	 * 旧実装のローカル擬似タイムスタンプを真の UNIX タイムスタンプへ変換します。
+	 *
+	 * @param int $legacy_timestamp 旧形式のタイムスタンプ。
+	 * @return int
+	 */
+	protected function convert_legacy_local_timestamp( $legacy_timestamp ) {
+		$local_string = gmdate( 'Y-m-d H:i:s', absint( $legacy_timestamp ) );
+		$datetime     = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $local_string, wp_timezone() );
+
+		return $datetime instanceof DateTimeImmutable ? $datetime->getTimestamp() : absint( $legacy_timestamp );
 	}
 
 	/**
@@ -4335,7 +5105,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return bool
 	 */
 	protected function manually_update_subscription_status( $subscription_id, $target_status ) {
-		$allowed_statuses = array( 'pending', 'active', 'on-hold', 'cancelled' );
+		$allowed_statuses = array( self::STATUS_PENDING, self::STATUS_ACTIVE, self::STATUS_ON_HOLD, self::STATUS_CANCELLED );
 		if ( ! in_array( $target_status, $allowed_statuses, true ) ) {
 			return false;
 		}
@@ -4346,33 +5116,115 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		$current_status = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
-		$current_time = current_time( 'timestamp' );
+		if ( ! $this->is_subscription_status_transition_allowed( $current_status, $target_status ) ) {
+			$subscription->add_order_note( sprintf( __( 'Rejected invalid subscription status transition: %1$s to %2$s.', 'megurio-subscriptions-for-woocommerce' ), $current_status, $target_status ) );
+			return false;
+		}
+
+		if ( $current_status === $target_status ) {
+			return true;
+		}
+
+		if ( self::STATUS_ACTIVE === $target_status && self::STATUS_ACTIVE !== $current_status && $this->has_unpaid_renewal_order( $subscription_id ) ) {
+			$subscription->add_order_note( __( 'Admin reactivation was blocked because an unpaid renewal order still exists. Confirm or cancel that order first.', 'megurio-subscriptions-for-woocommerce' ) );
+			return false;
+		}
+
+		$current_time = $this->get_current_timestamp();
 		$meta_map     = array(
 			'_megurio_subscription_status' => $target_status,
 		);
 
-		if ( 'active' === $target_status ) {
+		if ( self::STATUS_ACTIVE === $target_status ) {
 			$current_start = (int) $this->get_object_meta( $subscription_id, '_megurio_schedule_start' );
 			$meta_map['_megurio_schedule_start'] = $current_start ? $current_start : $current_time;
 
 			$current_next = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
-			if ( empty( $current_next ) || $current_next <= $current_time ) {
+			if ( self::STATUS_ON_HOLD === $current_status ) {
+				$meta_map['_megurio_next_payment'] = $this->calculate_resumed_next_payment( $subscription_id, $current_time );
+			} elseif ( empty( $current_next ) || $current_next <= $current_time ) {
 				$meta_map['_megurio_next_payment'] = $this->calculate_next_payment( $subscription_id, $current_time );
 			}
-		} elseif ( 'cancelled' === $target_status ) {
+			$meta_map['_megurio_hold_reason']     = '';
+			$meta_map['_megurio_paused_at']        = 0;
+			$meta_map['_megurio_paused_remaining'] = 0;
+		} elseif ( self::STATUS_ON_HOLD === $target_status && self::STATUS_ACTIVE === $current_status ) {
+			$current_next = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
+			$meta_map['_megurio_hold_reason']      = self::HOLD_REASON_ADMIN_PAUSED;
+			$meta_map['_megurio_next_payment']     = 0;
+			$meta_map['_megurio_paused_at']        = $current_time;
+			$meta_map['_megurio_paused_remaining'] = max( 0, $current_next - $current_time );
+		} elseif ( self::STATUS_CANCELLED === $target_status ) {
+			$meta_map['_megurio_hold_reason'] = '';
 			$meta_map['_megurio_next_payment'] = 0;
+			$meta_map['_megurio_pending_renewal_due_at'] = 0;
+			$meta_map['_megurio_paused_at'] = 0;
+			$meta_map['_megurio_paused_remaining'] = 0;
 		}
 
 		$this->set_subscription_meta( $subscription_id, $meta_map );
-		$subscription->add_order_note( sprintf( __( 'Subscription status manually changed to %s from admin.', 'megurio-subscriptions-for-woocommerce' ), $target_status ) );
+		if ( self::STATUS_ON_HOLD === $target_status ) {
+			$this->cancel_subscription_renewal_retries( $subscription_id );
+		}
+		if ( self::STATUS_CANCELLED === $target_status ) {
+			$this->cancel_subscription_renewal_retries( $subscription_id );
+		}
+		$subscription->add_order_note( sprintf( __( 'Subscription status manually changed to %s from admin.', 'megurio-subscriptions-for-woocommerce' ), $this->get_subscription_status_label( $target_status ) ) );
 
-		if ( 'cancelled' === $target_status ) {
+		if ( self::STATUS_CANCELLED === $target_status ) {
 			$this->send_subscription_cancel_email( $subscription_id, 'admin' );
-		} elseif ( 'active' === $target_status && 'active' !== $current_status ) {
+		} elseif ( self::STATUS_ACTIVE === $target_status && self::STATUS_ACTIVE !== $current_status ) {
 			$this->send_subscription_reactivated_email( $subscription_id, 'admin' );
 		}
 
 		return true;
+	}
+
+	/**
+	 * 定期購入の許可された状態遷移だけを通します。cancelled は終端状態です。
+	 *
+	 * @param string $current_status 現在状態。
+	 * @param string $target_status  遷移先。
+	 * @return bool
+	 */
+	protected function is_subscription_status_transition_allowed( $current_status, $target_status ) {
+		if ( $current_status === $target_status ) {
+			return true;
+		}
+
+		$transitions = array(
+			self::STATUS_PENDING   => array( self::STATUS_ACTIVE, self::STATUS_CANCELLED ),
+			self::STATUS_ACTIVE    => array( self::STATUS_ON_HOLD, self::STATUS_CANCELLED ),
+			self::STATUS_ON_HOLD   => array( self::STATUS_ACTIVE, self::STATUS_CANCELLED ),
+			self::STATUS_CANCELLED => array(),
+		);
+
+		return isset( $transitions[ $current_status ] )
+			&& in_array( $target_status, $transitions[ $current_status ], true );
+	}
+
+	/**
+	 * 管理画面に表示する現在状態と遷移可能な状態だけを返します。
+	 *
+	 * @param string $current_status 現在状態。
+	 * @return array
+	 */
+	protected function get_allowed_subscription_status_targets( $current_status ) {
+		$labels = array(
+			self::STATUS_PENDING   => __( 'Pending', 'megurio-subscriptions-for-woocommerce' ),
+			self::STATUS_ACTIVE    => __( 'Active', 'megurio-subscriptions-for-woocommerce' ),
+			self::STATUS_ON_HOLD   => __( 'On Hold', 'megurio-subscriptions-for-woocommerce' ),
+			self::STATUS_CANCELLED => __( 'Cancelled', 'megurio-subscriptions-for-woocommerce' ),
+		);
+		$targets = array();
+
+		foreach ( $labels as $status => $label ) {
+			if ( $this->is_subscription_status_transition_allowed( $current_status, $status ) ) {
+				$targets[ $status ] = $label;
+			}
+		}
+
+		return $targets;
 	}
 
 	/**
@@ -4912,6 +5764,55 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				$url = admin_url( 'post.php?post=' . $order_id . '&action=edit' );
 
 				return '<a href="' . esc_url( $url ) . '">#' . esc_html( $order_id ) . '</a>';
+			},
+			$content
+		);
+	}
+
+	/**
+	 * 旧バージョンで保存された英語や内部ステータス名を管理者向け表示へ直します。
+	 * 保存済みメモは改変せず、表示時だけ読みやすくします。
+	 *
+	 * @param string $content メモ本文。
+	 * @return string
+	 */
+	protected function format_admin_subscription_note( $content ) {
+		$content = (string) $content;
+
+		$content = preg_replace_callback(
+			'/^Subscription paused until bank transfer for renewal order #(\d+) is confirmed\.$/',
+			function ( $matches ) {
+				return sprintf(
+					/* translators: %d: renewal order ID */
+					__( 'Subscription paused until bank transfer for renewal order #%d is confirmed.', 'megurio-subscriptions-for-woocommerce' ),
+					absint( $matches[1] )
+				);
+			},
+			$content
+		);
+
+		if ( 'Admin reactivation was blocked because an unpaid renewal order still exists. Confirm or cancel that order first.' === $content ) {
+			return __( 'Admin reactivation was blocked because an unpaid renewal order still exists. Confirm or cancel that order first.', 'megurio-subscriptions-for-woocommerce' );
+		}
+
+		$content = preg_replace_callback(
+			'/^Subscription status manually changed to (pending|active|on-hold|cancelled) from admin\.$/',
+			function ( $matches ) {
+				return sprintf(
+					__( 'Subscription status manually changed to %s from admin.', 'megurio-subscriptions-for-woocommerce' ),
+					$this->get_subscription_status_label( $matches[1] )
+				);
+			},
+			$content
+		);
+
+		return preg_replace_callback(
+			'/^管理画面から定期購入状態を (pending|active|on-hold|cancelled) に変更しました。$/u',
+			function ( $matches ) {
+				return sprintf(
+					__( 'Subscription status manually changed to %s from admin.', 'megurio-subscriptions-for-woocommerce' ),
+					$this->get_subscription_status_label( $matches[1] )
+				);
 			},
 			$content
 		);
