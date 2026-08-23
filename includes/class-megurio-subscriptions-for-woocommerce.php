@@ -851,16 +851,34 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return;
 		}
 
-		$current_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'subscriptions';
-		$notice      = $this->get_query_text( 'megurio_notice' );
-		$notice_type = 'error' === $this->get_query_text( 'megurio_notice_type' ) ? 'error' : 'success';
+		$current_tab      = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'subscriptions';
+		$notice           = $this->get_query_text( 'megurio_notice' );
+		$notice_type      = 'error' === $this->get_query_text( 'megurio_notice_type' ) ? 'error' : 'success';
+		$subscription_ids = $this->sort_admin_subscription_ids( $this->get_all_subscription_ids() );
+		$selected_id      = $this->get_query_int( 'subscription_id' );
+		$selected_order   = $selected_id ? wc_get_order( $selected_id ) : false;
+		$counts           = $this->get_subscription_status_counts( $subscription_ids );
+		$notice_count     = $this->get_query_int( 'megurio_count' );
 		?>
-		<div class="wrap">
-			<h1><?php esc_html_e( 'Megurio Subscriptions', 'megurio-subscriptions-for-woocommerce' ); ?></h1>
-			<nav class="nav-tab-wrapper">
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=megurio-subscriptions' ) ); ?>" class="nav-tab <?php echo 'subscriptions' === $current_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Subscriptions', 'megurio-subscriptions-for-woocommerce' ); ?></a>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=megurio-subscriptions&tab=email-settings' ) ); ?>" class="nav-tab <?php echo 'email-settings' === $current_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Email Settings', 'megurio-subscriptions-for-woocommerce' ); ?></a>
-			</nav>
+		<div class="wrap megurio-admin-wrap">
+			<div class="page-head">
+				<div>
+					<div class="page-head-title"><?php esc_html_e( 'Megurio Subscriptions', 'megurio-subscriptions-for-woocommerce' ); ?></div>
+					<div class="page-head-desc">契約合計 <b class="num"><?php echo esc_html( count( $subscription_ids ) ); ?> 件</b> · 稼働中 <b class="num" style="color:var(--success)"><?php echo esc_html( $counts['active'] ); ?> 件</b> · 要対応 <b class="num" style="color:var(--warning)"><?php echo esc_html( $counts['on-hold'] ); ?> 件</b> · 解約済み <b class="num" style="color:var(--text-tertiary)"><?php echo esc_html( $counts['cancelled'] ); ?> 件</b></div>
+				</div>
+				<div class="page-head-actions">
+					<nav class="megurio-nav-pills">
+						<a href="<?php echo esc_url( admin_url( 'admin.php?page=megurio-subscriptions' ) ); ?>" class="btn <?php echo 'subscriptions' === $current_tab ? 'btn-primary' : 'btn-secondary'; ?> btn-sm">
+							<span class="dashicons dashicons-update-alt" aria-hidden="true"></span>
+							<span><?php esc_html_e( 'Subscriptions', 'megurio-subscriptions-for-woocommerce' ); ?></span>
+						</a>
+						<a href="<?php echo esc_url( admin_url( 'admin.php?page=megurio-subscriptions&tab=email-settings' ) ); ?>" class="btn <?php echo 'email-settings' === $current_tab ? 'btn-primary' : 'btn-secondary'; ?> btn-sm">
+							<span class="dashicons dashicons-email" aria-hidden="true"></span>
+							<span><?php esc_html_e( 'Email Settings', 'megurio-subscriptions-for-woocommerce' ); ?></span>
+						</a>
+					</nav>
+				</div>
+			</div>
 
 		<?php if ( $notice ) : ?>
 			<div class="notice notice-<?php echo esc_attr( $notice_type ); ?> is-dismissible">
@@ -871,117 +889,276 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		<?php if ( 'email-settings' === $current_tab ) :
 			$this->render_email_settings_tab();
 		else :
-		$subscription_ids = $this->sort_admin_subscription_ids( $this->get_all_subscription_ids() );
-		$selected_id      = $this->get_query_int( 'subscription_id' );
-		$selected_order   = $selected_id ? wc_get_order( $selected_id ) : false;
-		$counts           = $this->get_subscription_status_counts( $subscription_ids );
-		$notice_count     = $this->get_query_int( 'megurio_count' );
 		?>
 		<?php if ( ! ( $selected_order instanceof WC_Order ) ) : ?>
-			<p><?php esc_html_e( 'Review subscription status, upcoming billing, and renewal orders. Subscriptions requiring attention are shown first.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
-
 		<?php if ( $notice_count ) : ?>
 			<div class="notice notice-info is-dismissible">
 				<p><?php esc_html_e( 'Count:', 'megurio-subscriptions-for-woocommerce' ); ?> <?php echo esc_html( $notice_count ); ?></p>
 			</div>
 		<?php endif; ?>
 
-				<div class="megurio-admin-grid">
-					<div class="megurio-admin-card">
-						<div><?php esc_html_e( 'Total Subscriptions', 'megurio-subscriptions-for-woocommerce' ); ?></div>
-						<strong><?php echo esc_html( count( $subscription_ids ) ); ?></strong>
+				<div class="grid-5col section-gap" id="megurioStatsGrid">
+					<div class="balance-card active-card" data-status-target="all" role="button" tabindex="0" title="すべての定期購入を表示">
+						<div class="balance-card-top">
+							<span class="balance-card-label">全定期購入</span>
+							<span class="balance-card-icon"><span class="dashicons dashicons-update-alt"></span></span>
+						</div>
+						<div class="balance-card-value"><?php echo esc_html( count( $subscription_ids ) ); ?> <span class="balance-card-unit">件</span></div>
+						<div class="balance-card-foot"><span class="dot-neutral">●</span> 全件の定期契約</div>
 					</div>
-					<div class="megurio-admin-card">
-						<div><?php esc_html_e( 'Pending', 'megurio-subscriptions-for-woocommerce' ); ?></div>
-						<strong><?php echo esc_html( $counts['pending'] ); ?></strong>
+					<div class="balance-card" data-status-target="active" role="button" tabindex="0" title="稼働中の定期購入を表示">
+						<div class="balance-card-top">
+							<span class="balance-card-label">利用中（稼働中）</span>
+							<span class="balance-card-icon green"><span class="dashicons dashicons-yes-alt"></span></span>
+						</div>
+						<div class="balance-card-value" style="color:var(--success)"><?php echo esc_html( $counts['active'] ); ?> <span class="balance-card-unit">件</span></div>
+						<div class="balance-card-foot"><span class="dot-ok">●</span> 正常稼働・自動課金中</div>
 					</div>
-					<div class="megurio-admin-card">
-						<div><?php esc_html_e( 'Active', 'megurio-subscriptions-for-woocommerce' ); ?></div>
-						<strong><?php echo esc_html( $counts['active'] ); ?></strong>
+					<div class="balance-card" data-status-target="on-hold" role="button" tabindex="0" title="一時停止中の定期購入を表示">
+						<div class="balance-card-top">
+							<span class="balance-card-label">一時停止（要対応）</span>
+							<span class="balance-card-icon amber"><span class="dashicons dashicons-warning"></span></span>
+						</div>
+						<div class="balance-card-value" style="color:var(--warning)"><?php echo esc_html( $counts['on-hold'] ); ?> <span class="balance-card-unit">件</span></div>
+						<div class="balance-card-foot"><span class="dot-warn">●</span> 支払い待ち・要対応</div>
 					</div>
-					<div class="megurio-admin-card">
-						<div><?php esc_html_e( 'On Hold', 'megurio-subscriptions-for-woocommerce' ); ?></div>
-						<strong><?php echo esc_html( $counts['on-hold'] ); ?></strong>
+					<div class="balance-card" data-status-target="pending" role="button" tabindex="0" title="開始待ちの定期購入を表示">
+						<div class="balance-card-top">
+							<span class="balance-card-label">開始待ち</span>
+							<span class="balance-card-icon blue"><span class="dashicons dashicons-clock"></span></span>
+						</div>
+						<div class="balance-card-value" style="color:var(--info)"><?php echo esc_html( $counts['pending'] ); ?> <span class="balance-card-unit">件</span></div>
+						<div class="balance-card-foot"><span class="dot-info">●</span> 初回決済確認待ち</div>
 					</div>
-					<div class="megurio-admin-card">
-						<div><?php esc_html_e( 'Cancelled', 'megurio-subscriptions-for-woocommerce' ); ?></div>
-						<strong><?php echo esc_html( $counts['cancelled'] ); ?></strong>
+					<div class="balance-card" data-status-target="cancelled" role="button" tabindex="0" title="解約済みの定期購入を表示">
+						<div class="balance-card-top">
+							<span class="balance-card-label">解約済み</span>
+							<span class="balance-card-icon red"><span class="dashicons dashicons-dismiss"></span></span>
+						</div>
+						<div class="balance-card-value" style="color:var(--text-tertiary)"><?php echo esc_html( $counts['cancelled'] ); ?> <span class="balance-card-unit">件</span></div>
+						<div class="balance-card-foot"><span class="dot-neutral">●</span> 以後の請求停止</div>
 					</div>
 				</div>
 
-			<table class="megurio-admin-table">
-				<thead>
-					<tr>
-							<th><?php esc_html_e( 'Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Renewal Amount', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-							<th><?php esc_html_e( 'Action', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-					</tr>
-				</thead>
-				<tbody>
-						<?php if ( empty( $subscription_ids ) ) : ?>
-							<tr>
-								<td colspan="7"><?php esc_html_e( 'No subscription records found.', 'megurio-subscriptions-for-woocommerce' ); ?></td>
-							</tr>
-					<?php else : ?>
-						<?php foreach ( $subscription_ids as $subscription_id ) : ?>
-								<?php
-								$status          = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
-								$subscription    = wc_get_order( $subscription_id );
-								$product_id      = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
-								$customer        = $this->get_subscription_customer_display( $subscription_id );
-								$next_payment    = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
-								$last_renewal_id = absint( $this->get_object_meta( $subscription_id, '_megurio_last_renewal_order' ) );
-								$last_renewal    = $last_renewal_id ? wc_get_order( $last_renewal_id ) : false;
-								$runtime_status  = $this->get_subscription_runtime_status( $subscription_id );
-								$product_title   = $product_id ? get_the_title( $product_id ) : '-';
-								$detail_page_url = add_query_arg(
-									array(
-										'page'            => 'megurio-subscriptions',
-										'subscription_id' => $subscription_id,
-									),
-									admin_url( 'admin.php' )
-								);
-								?>
-							<tr>
-								<td data-label="<?php esc_attr_e( 'Subscription', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__subscription">
-									<strong>#<?php echo esc_html( $subscription_id ); ?></strong>
-									<?php if ( $product_id ) : ?>
-										<a href="<?php echo esc_url( get_edit_post_link( $product_id ) ); ?>"><?php echo esc_html( $product_title ); ?></a>
-									<?php else : ?>
-										-
-									<?php endif; ?>
-								</td>
-								<td data-label="<?php esc_attr_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__customer">
-									<?php if ( $customer['name'] ) : ?><strong><?php echo esc_html( $customer['name'] ); ?></strong><?php endif; ?>
-									<?php if ( $customer['email'] ) : ?><small><?php echo esc_html( $customer['email'] ); ?></small><?php endif; ?>
-									<?php if ( $customer['id'] ) : ?><small>#<?php echo esc_html( $customer['id'] ); ?></small><?php endif; ?>
-									<?php if ( ! $customer['name'] && ! $customer['email'] && ! $customer['id'] ) : ?>-<?php endif; ?>
-									</td>
-								<td data-label="<?php esc_attr_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__status">
-									<?php echo wp_kses_post( $this->render_status_badge( $status, $subscription_id ) ); ?>
-									<?php if ( ! empty( $runtime_status['description'] ) ) : ?><small><?php echo esc_html( $runtime_status['description'] ); ?></small><?php endif; ?>
-								</td>
-								<td data-label="<?php esc_attr_e( 'Renewal Amount', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $subscription instanceof WC_Order ? wp_kses_post( $subscription->get_formatted_order_total() ) : '-'; ?></td>
-								<td data-label="<?php esc_attr_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo esc_html( $this->format_timestamp( $next_payment ) ); ?></td>
-								<td data-label="<?php esc_attr_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__renewal">
-									<?php if ( $last_renewal instanceof WC_Order ) : ?>
-										<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $last_renewal_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $last_renewal_id ); ?></a>
-										<?php echo wp_kses_post( $this->render_order_business_status( $last_renewal ) ); ?>
-									<?php else : ?>
-										<?php esc_html_e( 'Not created yet', 'megurio-subscriptions-for-woocommerce' ); ?>
-									<?php endif; ?>
-								</td>
-								<td data-label="<?php esc_attr_e( 'Action', 'megurio-subscriptions-for-woocommerce' ); ?>"><a class="button button-secondary" href="<?php echo esc_url( $detail_page_url ); ?>"><?php esc_html_e( 'View Details', 'megurio-subscriptions-for-woocommerce' ); ?></a></td>
-							</tr>
-						<?php endforeach; ?>
-					<?php endif; ?>
-				</tbody>
-			</table>
-		<?php endif; ?>
+				<div class="panel">
+					<div class="panel-head" style="margin-bottom:14px;flex-wrap:wrap">
+						<div class="tabs" id="megurioStatusFilters" style="border-bottom:none;margin-bottom:0">
+							<button type="button" class="tab active" data-filter="all">すべて <span class="count"><?php echo esc_html( count( $subscription_ids ) ); ?></span></button>
+							<button type="button" class="tab" data-filter="active">利用中 <span class="count"><?php echo esc_html( $counts['active'] ); ?></span></button>
+							<button type="button" class="tab" data-filter="on-hold">一時停止 <span class="count"><?php echo esc_html( $counts['on-hold'] ); ?></span></button>
+							<button type="button" class="tab" data-filter="pending">開始待ち <span class="count"><?php echo esc_html( $counts['pending'] ); ?></span></button>
+							<button type="button" class="tab" data-filter="cancelled">解約済み <span class="count"><?php echo esc_html( $counts['cancelled'] ); ?></span></button>
+						</div>
+						<div class="search" style="width:260px">
+							<span class="dashicons dashicons-search" aria-hidden="true"></span>
+							<input type="text" id="megurioSubscriptionSearch" placeholder="定期購入ID、顧客名、商品名…" autocomplete="off" />
+							<button type="button" id="megurioSearchClear" class="megurio-search-clear" aria-label="検索をクリア" style="display:none;">&times;</button>
+						</div>
+					</div>
+
+					<div class="table-wrap">
+						<table class="data-table megurio-admin-table" id="megurioSubscriptionTable">
+							<thead>
+								<tr>
+									<th><?php esc_html_e( 'Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+									<th><?php esc_html_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+									<th><?php esc_html_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+									<th class="amount"><?php esc_html_e( 'Renewal Amount', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+									<th><?php esc_html_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+									<th><?php esc_html_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+									<th style="text-align:right"><?php esc_html_e( 'Action', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php if ( empty( $subscription_ids ) ) : ?>
+									<tr class="megurio-empty-row">
+										<td colspan="7"><?php esc_html_e( 'No subscription records found.', 'megurio-subscriptions-for-woocommerce' ); ?></td>
+									</tr>
+								<?php else : ?>
+									<?php foreach ( $subscription_ids as $subscription_id ) : ?>
+										<?php
+										$status          = (string) $this->get_object_meta( $subscription_id, '_megurio_subscription_status' );
+										$subscription    = wc_get_order( $subscription_id );
+										$product_id      = absint( $this->get_object_meta( $subscription_id, '_megurio_product_id' ) );
+										$customer        = $this->get_subscription_customer_display( $subscription_id );
+										$next_payment    = (int) $this->get_object_meta( $subscription_id, '_megurio_next_payment' );
+										$last_renewal_id = absint( $this->get_object_meta( $subscription_id, '_megurio_last_renewal_order' ) );
+										$last_renewal    = $last_renewal_id ? wc_get_order( $last_renewal_id ) : false;
+										$runtime_status  = $this->get_subscription_runtime_status( $subscription_id );
+										$product_title   = $product_id ? get_the_title( $product_id ) : '-';
+										$detail_page_url = add_query_arg(
+											array(
+												'page'            => 'megurio-subscriptions',
+												'subscription_id' => $subscription_id,
+											),
+											admin_url( 'admin.php' )
+										);
+										$search_text = strtolower( $subscription_id . ' ' . $product_title . ' ' . $customer['name'] . ' ' . $customer['email'] . ' ' . $status . ' ' . ( $last_renewal_id ? $last_renewal_id : '' ) );
+										?>
+										<tr data-status="<?php echo esc_attr( $status ); ?>" data-search="<?php echo esc_attr( $search_text ); ?>">
+											<td data-label="<?php esc_attr_e( 'Subscription', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__subscription">
+												<a href="<?php echo esc_url( $detail_page_url ); ?>" class="cell-mono cell-strong">#<?php echo esc_html( $subscription_id ); ?></a>
+												<?php if ( $product_id ) : ?>
+													<div class="cell-sub"><a href="<?php echo esc_url( get_edit_post_link( $product_id ) ); ?>"><?php echo esc_html( $product_title ); ?></a></div>
+												<?php else : ?>
+													<div class="cell-sub">-</div>
+												<?php endif; ?>
+											</td>
+											<td data-label="<?php esc_attr_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__customer">
+												<div class="user-cell-info">
+													<div class="user-cell-name"><?php echo esc_html( $customer['name'] ? $customer['name'] : '-' ); ?></div>
+													<div class="user-cell-sub">
+														<?php echo esc_html( $customer['email'] ? $customer['email'] : '' ); ?>
+														<?php echo $customer['id'] ? ' · #' . esc_html( $customer['id'] ) : ''; ?>
+													</div>
+												</div>
+											</td>
+											<td data-label="<?php esc_attr_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__status">
+												<?php echo wp_kses_post( $this->render_status_badge( $status, $subscription_id ) ); ?>
+												<?php if ( ! empty( $runtime_status['description'] ) ) : ?>
+													<div class="cell-sub"><?php echo esc_html( $runtime_status['description'] ); ?></div>
+												<?php endif; ?>
+											</td>
+											<td data-label="<?php esc_attr_e( 'Renewal Amount', 'megurio-subscriptions-for-woocommerce' ); ?>" class="amount num megurio-admin-table__total">
+												<?php echo $subscription instanceof WC_Order ? wp_kses_post( $subscription->get_formatted_order_total() ) : '-'; ?>
+												<?php
+												$row_int_count = max( 1, absint( $this->get_object_meta( $subscription_id, '_megurio_interval_count' ) ) );
+												$row_int_unit  = (string) $this->get_object_meta( $subscription_id, '_megurio_interval_unit' );
+												if ( $subscription instanceof WC_Order && ! empty( $row_int_unit ) ) :
+												?>
+													<span class="cell-muted" style="font-size:11px;font-weight:400">/ <?php echo esc_html( $this->format_interval_label( $row_int_count, $row_int_unit ) ); ?></span>
+												<?php endif; ?>
+											</td>
+											<td data-label="<?php esc_attr_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?>" class="cell-muted num megurio-admin-table__date">
+												<?php echo esc_html( $next_payment ? $this->format_timestamp( $next_payment ) : '-' ); ?>
+											</td>
+											<td data-label="<?php esc_attr_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__renewal">
+												<?php if ( $last_renewal instanceof WC_Order ) : ?>
+													<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $last_renewal_id . '&action=edit' ) ); ?>" class="cell-mono cell-strong">#<?php echo esc_html( $last_renewal_id ); ?></a>
+													<?php echo wp_kses_post( $this->render_order_business_status( $last_renewal ) ); ?>
+												<?php else : ?>
+													<span class="cell-muted"><?php esc_html_e( 'Not created yet', 'megurio-subscriptions-for-woocommerce' ); ?></span>
+												<?php endif; ?>
+											</td>
+											<td data-label="<?php esc_attr_e( 'Action', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__actions" style="text-align:right">
+												<div class="megurio-table-actions" style="display:flex;justify-content:flex-end;align-items:center;gap:6px">
+													<a class="btn btn-xs btn-secondary" href="<?php echo esc_url( $detail_page_url ); ?>">
+														<span><?php esc_html_e( 'View Details', 'megurio-subscriptions-for-woocommerce' ); ?></span>
+													</a>
+												</div>
+											</td>
+										</tr>
+									<?php endforeach; ?>
+									<tr class="megurio-no-match-row" style="display:none;">
+										<td colspan="7"><?php esc_html_e( 'No matching subscription records found.', 'megurio-subscriptions-for-woocommerce' ); ?></td>
+									</tr>
+								<?php endif; ?>
+							</tbody>
+						</table>
+					</div>
+					<div class="pagination">
+						<span class="pagination-info" id="megurioTableMeta">全 <?php echo esc_html( count( $subscription_ids ) ); ?> 件の定期契約</span>
+					</div>
+				</div>
+
+				<script>
+				(function() {
+					var searchInput = document.getElementById('megurioSubscriptionSearch');
+					var clearBtn = document.getElementById('megurioSearchClear');
+					var filterTabs = document.querySelectorAll('#megurioStatusFilters .tab');
+					var statCards = document.querySelectorAll('#megurioStatsGrid .balance-card');
+					var table = document.getElementById('megurioSubscriptionTable');
+					var metaLabel = document.getElementById('megurioTableMeta');
+					if (!table) return;
+
+					var rows = table.querySelectorAll('tbody tr:not(.megurio-empty-row):not(.megurio-no-match-row)');
+					var noMatchRow = table.querySelector('.megurio-no-match-row');
+					var currentFilter = 'all';
+
+					function applyFilter() {
+						var query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+						if (clearBtn) {
+							clearBtn.style.display = query ? 'block' : 'none';
+						}
+
+						var visibleCount = 0;
+						rows.forEach(function(row) {
+							var status = row.getAttribute('data-status') || '';
+							var search = row.getAttribute('data-search') || '';
+
+							var matchStatus = (currentFilter === 'all' || status === currentFilter);
+							var matchSearch = (!query || search.indexOf(query) !== -1);
+
+							if (matchStatus && matchSearch) {
+								row.style.display = '';
+								visibleCount++;
+							} else {
+								row.style.display = 'none';
+							}
+						});
+
+						if (noMatchRow) {
+							noMatchRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+						}
+
+						if (metaLabel) {
+							metaLabel.textContent = '全 ' + visibleCount + ' 件の定期契約を表示中';
+						}
+					}
+
+					if (searchInput) {
+						searchInput.addEventListener('input', applyFilter);
+					}
+
+					if (clearBtn) {
+						clearBtn.addEventListener('click', function() {
+							searchInput.value = '';
+							applyFilter();
+							searchInput.focus();
+						});
+					}
+
+					function setFilter(filter) {
+						currentFilter = filter;
+						filterTabs.forEach(function(btn) {
+							if (btn.getAttribute('data-filter') === filter) {
+								btn.classList.add('active');
+							} else {
+								btn.classList.remove('active');
+							}
+						});
+
+						statCards.forEach(function(card) {
+							if (card.getAttribute('data-status-target') === filter) {
+								card.classList.add('active-card');
+							} else {
+								card.classList.remove('active-card');
+							}
+						});
+
+						applyFilter();
+					}
+
+					filterTabs.forEach(function(btn) {
+						btn.addEventListener('click', function() {
+							setFilter(this.getAttribute('data-filter'));
+						});
+					});
+
+					statCards.forEach(function(card) {
+						card.addEventListener('click', function() {
+							setFilter(this.getAttribute('data-status-target'));
+						});
+						card.addEventListener('keydown', function(e) {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								setFilter(this.getAttribute('data-status-target'));
+							}
+						});
+					});
+				})();
+				</script>
+			<?php endif; ?>
 
 			<?php if ( $selected_order instanceof WC_Order ) : ?>
 				<?php
@@ -1008,10 +1185,21 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 					);
 				?>
 				<div class="megurio-admin-detail">
-					<h2><?php echo esc_html( sprintf( __( 'Subscription #%d Details', 'megurio-subscriptions-for-woocommerce' ), $selected_id ) ); ?></h2>
-					<p>
-						<a href="<?php echo esc_url( admin_url( 'admin.php?page=megurio-subscriptions' ) ); ?>" class="button">&larr; <?php esc_html_e( 'Back to Subscription List', 'megurio-subscriptions-for-woocommerce' ); ?></a>
-					</p>
+					<div class="page-head" style="margin-bottom:16px">
+						<div>
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=megurio-subscriptions' ) ); ?>" class="btn btn-ghost btn-sm" style="margin-bottom:8px" title="<?php esc_attr_e( 'Back to Subscription List', 'megurio-subscriptions-for-woocommerce' ); ?>">
+								<span class="dashicons dashicons-arrow-left-alt" style="font-size:14px;width:14px;height:14px;margin-right:2px"></span>
+								<span><?php esc_html_e( 'Back to Subscription List', 'megurio-subscriptions-for-woocommerce' ); ?></span>
+							</a>
+							<div class="page-head-title" style="display:flex;align-items:center;gap:10px">
+								<span><?php echo esc_html( sprintf( __( 'Subscription #%d Details', 'megurio-subscriptions-for-woocommerce' ), $selected_id ) ); ?></span>
+								<?php echo wp_kses_post( $this->render_status_badge( $selected_status, $selected_id ) ); ?>
+							</div>
+							<div class="page-head-desc">
+								親注文 <a href="<?php echo esc_url( admin_url( 'post.php?post=' . $selected_parent . '&action=edit' ) ); ?>" class="cell-mono cell-strong">#<?php echo esc_html( $selected_parent ); ?></a> · <?php echo esc_html( $this->format_timestamp( $selected_start ) ); ?> 開始 · 次回請求 <?php echo esc_html( $selected_next ? $this->format_timestamp( $selected_next ) : '-' ); ?>
+							</div>
+						</div>
+					</div>
 
 					<?php
 					$this->render_admin_subscription_overview(
@@ -1031,49 +1219,75 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 					);
 					?>
 
-					<div class="megurio-admin-meta">
-						<div>
-							<strong><?php esc_html_e( 'Product', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-							<?php if ( $selected_product ) : ?>
-								<a href="<?php echo esc_url( get_edit_post_link( $selected_product ) ); ?>"><?php echo esc_html( get_the_title( $selected_product ) ); ?></a>
-							<?php else : ?>
-								-
-							<?php endif; ?>
-						</div>
-						<div>
-							<strong><?php esc_html_e( 'Parent Order', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-							<?php if ( $selected_parent ) : ?>
-								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $selected_parent . '&action=edit' ) ); ?>">#<?php echo esc_html( $selected_parent ); ?></a>
-							<?php else : ?>
-								-
-							<?php endif; ?>
-						</div>
-						<div>
-							<strong><?php esc_html_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-							<?php if ( $selected_customer_display['name'] ) : ?><span><?php echo esc_html( $selected_customer_display['name'] ); ?></span><?php endif; ?>
-							<?php if ( $selected_customer_display['email'] ) : ?><small><?php echo esc_html( $selected_customer_display['email'] ); ?></small><?php endif; ?>
-							<?php if ( $selected_customer ) : ?><small>#<?php echo esc_html( $selected_customer ); ?></small><?php endif; ?>
-							<?php if ( ! $selected_customer_display['name'] && ! $selected_customer_display['email'] && ! $selected_customer ) : ?>-<?php endif; ?>
-						</div>
-						<div>
-							<strong><?php esc_html_e( 'Payment Method', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-							<?php echo esc_html( $payment_title ? $payment_title : '-' ); ?>
-						</div>
-						<div>
-							<strong><?php esc_html_e( 'Renewal Interval', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-							<?php echo esc_html( $this->format_interval_label( $interval_count, $interval_unit ) ); ?>
+					<div class="megurio-admin-meta-section">
+						<h3 class="megurio-section-heading"><?php esc_html_e( 'Subscription Details', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
+						<div class="megurio-admin-meta">
+							<div class="megurio-admin-meta__item">
+								<div class="megurio-admin-meta__icon" aria-hidden="true"><span class="dashicons dashicons-products"></span></div>
+								<div class="megurio-admin-meta__body">
+									<strong><?php esc_html_e( 'Product', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+									<span class="megurio-admin-meta__val">
+										<?php if ( $selected_product ) : ?>
+											<a href="<?php echo esc_url( get_edit_post_link( $selected_product ) ); ?>"><?php echo esc_html( get_the_title( $selected_product ) ); ?></a>
+										<?php else : ?>
+											-
+										<?php endif; ?>
+									</span>
+								</div>
+							</div>
+							<div class="megurio-admin-meta__item">
+								<div class="megurio-admin-meta__icon" aria-hidden="true"><span class="dashicons dashicons-media-text"></span></div>
+								<div class="megurio-admin-meta__body">
+									<strong><?php esc_html_e( 'Parent Order', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+									<span class="megurio-admin-meta__val">
+										<?php if ( $selected_parent ) : ?>
+											<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $selected_parent . '&action=edit' ) ); ?>">#<?php echo esc_html( $selected_parent ); ?></a>
+										<?php else : ?>
+											-
+										<?php endif; ?>
+									</span>
+								</div>
+							</div>
+							<div class="megurio-admin-meta__item">
+								<div class="megurio-admin-meta__icon" aria-hidden="true"><span class="dashicons dashicons-admin-users"></span></div>
+								<div class="megurio-admin-meta__body">
+									<strong><?php esc_html_e( 'Customer', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+									<span class="megurio-admin-meta__val">
+										<?php if ( $selected_customer_display['name'] ) : ?><span class="megurio-user-name"><?php echo esc_html( $selected_customer_display['name'] ); ?></span><?php endif; ?>
+										<?php if ( $selected_customer_display['email'] ) : ?><small class="megurio-user-email"><?php echo esc_html( $selected_customer_display['email'] ); ?></small><?php endif; ?>
+										<?php if ( $selected_customer ) : ?><small class="megurio-user-id">#<?php echo esc_html( $selected_customer ); ?></small><?php endif; ?>
+										<?php if ( ! $selected_customer_display['name'] && ! $selected_customer_display['email'] && ! $selected_customer ) : ?>-<?php endif; ?>
+									</span>
+								</div>
+							</div>
+							<div class="megurio-admin-meta__item">
+								<div class="megurio-admin-meta__icon" aria-hidden="true"><span class="dashicons dashicons-money-alt"></span></div>
+								<div class="megurio-admin-meta__body">
+									<strong><?php esc_html_e( 'Payment Method', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+									<span class="megurio-admin-meta__val"><?php echo esc_html( $payment_title ? $payment_title : '-' ); ?></span>
+								</div>
+							</div>
+							<div class="megurio-admin-meta__item">
+								<div class="megurio-admin-meta__icon" aria-hidden="true"><span class="dashicons dashicons-update-alt"></span></div>
+								<div class="megurio-admin-meta__body">
+									<strong><?php esc_html_e( 'Renewal Interval', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+									<span class="megurio-admin-meta__val"><?php echo esc_html( $this->format_interval_label( $interval_count, $interval_unit ) ); ?></span>
+								</div>
+							</div>
 						</div>
 					</div>
 
 					<section class="megurio-admin-actions" aria-labelledby="megurio-admin-actions-title">
-						<h3 id="megurio-admin-actions-title"><?php esc_html_e( 'Subscription Actions', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
-						<div class="megurio-admin-actions__current">
-							<strong><?php esc_html_e( 'Current Status', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-							<?php echo wp_kses_post( $this->render_status_badge( $selected_status, $selected_id ) ); ?>
-							<span><?php echo esc_html( ! empty( $runtime_status['description'] ) ? $runtime_status['description'] : $this->get_subscription_status_label( $selected_status, $selected_id ) ); ?></span>
+						<div class="megurio-admin-actions__header">
+							<h3 id="megurio-admin-actions-title"><?php esc_html_e( 'Subscription Actions', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
+							<div class="megurio-admin-actions__current">
+								<span class="megurio-actions-status-label"><?php echo esc_html( __( 'Current Status', 'megurio-subscriptions-for-woocommerce' ) . ':' ); ?></span>
+								<?php echo wp_kses_post( $this->render_status_badge( $selected_status, $selected_id ) ); ?>
+								<span class="megurio-actions-hint"><?php echo esc_html( ! empty( $runtime_status['description'] ) ? $runtime_status['description'] : $this->get_subscription_status_label( $selected_status, $selected_id ) ); ?></span>
+							</div>
 						</div>
 						<?php if ( self::STATUS_CANCELLED === $selected_status ) : ?>
-							<p class="description"><?php esc_html_e( 'This subscription is already cancelled. No further billing will occur, and it cannot be reopened.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
+							<p class="description megurio-actions-cancelled-note"><?php esc_html_e( 'This subscription is already cancelled. No further billing will occur, and it cannot be reopened.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
 						<?php else : ?>
 							<div class="megurio-admin-actions__buttons">
 								<?php foreach ( array_keys( $this->get_allowed_subscription_status_targets( $selected_status ) ) as $target_value ) : ?>
@@ -1099,14 +1313,17 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 									}
 									?>
 									<div class="megurio-admin-action-card <?php echo $is_cancel_action ? 'megurio-admin-action-card--danger' : ''; ?>">
-										<p><?php echo esc_html( $action_description ); ?></p>
+										<div class="megurio-admin-action-card__content">
+											<strong><?php echo esc_html( $action_label ); ?></strong>
+											<p><?php echo esc_html( $action_description ); ?></p>
+										</div>
 										<form method="post" action="" <?php echo $is_cancel_action ? 'class="megurio-admin-cancel-form" data-confirm="' . esc_attr__( 'This will end all future billing and cannot be undone. Cancel this subscription?', 'megurio-subscriptions-for-woocommerce' ) . '"' : ''; ?>>
 											<?php wp_nonce_field( 'megurio_change_subscription_status' ); ?>
 											<input type="hidden" name="page" value="megurio-subscriptions" />
 											<input type="hidden" name="megurio_action" value="change_status" />
 											<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $selected_id ); ?>" />
 											<input type="hidden" name="target_status" value="<?php echo esc_attr( $target_value ); ?>" />
-											<button type="submit" class="button <?php echo $is_cancel_action ? 'megurio-button-danger' : ( self::STATUS_ACTIVE === $target_value ? 'button-primary' : 'button-secondary' ); ?>"><?php echo esc_html( $action_label ); ?></button>
+											<button type="submit" class="btn <?php echo $is_cancel_action ? 'btn-danger' : ( self::STATUS_ACTIVE === $target_value ? 'btn-primary' : 'btn-secondary' ); ?>"><?php echo esc_html( $action_label ); ?></button>
 										</form>
 									</div>
 								<?php endforeach; ?>
@@ -1114,53 +1331,72 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 						<?php endif; ?>
 					</section>
 
-					<h3><?php esc_html_e( 'Renewal Order History', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
-					<?php if ( empty( $renewal_ids ) ) : ?>
-						<p><?php esc_html_e( 'No renewal orders have been created yet.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
-					<?php else : ?>
-						<table class="megurio-admin-subtable">
-							<thead>
-								<tr>
-									<th><?php esc_html_e( 'Order ID', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-									<th><?php esc_html_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-									<th><?php esc_html_e( 'Created Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-									<th><?php esc_html_e( 'Total', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-								</tr>
-							</thead>
-							<tbody>
-								<?php foreach ( $renewal_ids as $renewal_id ) : ?>
-									<?php $renewal_order = wc_get_order( $renewal_id ); ?>
-									<tr>
-										<td data-label="<?php esc_attr_e( 'Order ID', 'megurio-subscriptions-for-woocommerce' ); ?>">
-											<?php if ( $renewal_order instanceof WC_Order ) : ?>
-												<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $renewal_id . '&action=edit' ) ); ?>">#<?php echo esc_html( $renewal_id ); ?></a>
-											<?php else : ?>
-												#<?php echo esc_html( $renewal_id ); ?>
-											<?php endif; ?>
-										</td>
-										<td data-label="<?php esc_attr_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order instanceof WC_Order ? wp_kses_post( $this->render_order_business_status( $renewal_order ) ) : '-'; ?></td>
-										<td data-label="<?php esc_attr_e( 'Created Date', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order instanceof WC_Order ? esc_html( $this->format_datetime_string( $renewal_order->get_date_created() ) ) : '-'; ?></td>
-										<td data-label="<?php esc_attr_e( 'Total', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order instanceof WC_Order ? wp_kses_post( $renewal_order->get_formatted_order_total() ) : '-'; ?></td>
-									</tr>
-								<?php endforeach; ?>
-							</tbody>
-						</table>
-					<?php endif; ?>
+					<div class="megurio-admin-subtable-section">
+						<div class="megurio-section-header">
+							<h3 class="megurio-section-heading"><?php esc_html_e( 'Renewal Order History', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
+							<span class="megurio-badge-count"><?php echo esc_html( count( $renewal_ids ) ); ?></span>
+						</div>
+						<?php if ( empty( $renewal_ids ) ) : ?>
+							<div class="megurio-empty-state">
+								<span class="dashicons dashicons-calendar-alt" aria-hidden="true"></span>
+								<p><?php esc_html_e( 'No renewal orders have been created yet.', 'megurio-subscriptions-for-woocommerce' ); ?></p>
+							</div>
+						<?php else : ?>
+							<div class="table-wrap">
+								<table class="data-table megurio-admin-subtable">
+									<thead>
+										<tr>
+											<th><?php esc_html_e( 'Order ID', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+											<th><?php esc_html_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+											<th><?php esc_html_e( 'Created Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+											<th class="amount"><?php esc_html_e( 'Total', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+										</tr>
+									</thead>
+									<tbody>
+										<?php foreach ( $renewal_ids as $renewal_id ) : ?>
+											<?php $renewal_order = wc_get_order( $renewal_id ); ?>
+											<tr>
+												<td data-label="<?php esc_attr_e( 'Order ID', 'megurio-subscriptions-for-woocommerce' ); ?>" class="megurio-admin-table__id">
+													<?php if ( $renewal_order instanceof WC_Order ) : ?>
+														<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $renewal_id . '&action=edit' ) ); ?>" class="cell-mono cell-strong">#<?php echo esc_html( $renewal_id ); ?></a>
+													<?php else : ?>
+														<span class="cell-mono">#<?php echo esc_html( $renewal_id ); ?></span>
+													<?php endif; ?>
+												</td>
+												<td data-label="<?php esc_attr_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?>"><?php echo $renewal_order instanceof WC_Order ? wp_kses_post( $this->render_order_business_status( $renewal_order ) ) : '-'; ?></td>
+												<td data-label="<?php esc_attr_e( 'Created Date', 'megurio-subscriptions-for-woocommerce' ); ?>" class="cell-muted num megurio-admin-table__date"><?php echo $renewal_order instanceof WC_Order ? esc_html( $this->format_datetime_string( $renewal_order->get_date_created() ) ) : '-'; ?></td>
+												<td data-label="<?php esc_attr_e( 'Total', 'megurio-subscriptions-for-woocommerce' ); ?>" class="amount num megurio-admin-table__total"><?php echo $renewal_order instanceof WC_Order ? wp_kses_post( $renewal_order->get_formatted_order_total() ) : '-'; ?></td>
+											</tr>
+										<?php endforeach; ?>
+									</tbody>
+								</table>
+							</div>
+						<?php endif; ?>
+					</div>
 
 					<details class="megurio-admin-history">
-						<summary><?php echo esc_html( sprintf( __( 'View Action and Payment History (%d entries)', 'megurio-subscriptions-for-woocommerce' ), count( $order_notes ) ) ); ?></summary>
-						<ul class="megurio-note-list">
-							<?php if ( empty( $order_notes ) ) : ?>
-								<li><?php esc_html_e( 'No notes yet.', 'megurio-subscriptions-for-woocommerce' ); ?></li>
-							<?php else : ?>
-								<?php foreach ( $order_notes as $note ) : ?>
-									<li>
-										<div><strong><?php echo esc_html( $this->format_datetime_string( $note->date_created ) ); ?></strong></div>
-										<div><?php echo wp_kses_post( wpautop( $this->link_order_references_in_note( $this->format_admin_subscription_note( $note->content ) ) ) ); ?></div>
-									</li>
-								<?php endforeach; ?>
-							<?php endif; ?>
-						</ul>
+						<summary class="megurio-admin-history__summary">
+							<span class="dashicons dashicons-arrow-right-alt2 megurio-history-toggle-icon" aria-hidden="true"></span>
+							<span class="megurio-history-title"><?php echo esc_html( sprintf( __( 'View Action and Payment History (%d entries)', 'megurio-subscriptions-for-woocommerce' ), count( $order_notes ) ) ); ?></span>
+							<span class="megurio-badge-count"><?php echo esc_html( count( $order_notes ) ); ?></span>
+						</summary>
+						<div class="megurio-history-content">
+							<ul class="megurio-note-list">
+								<?php if ( empty( $order_notes ) ) : ?>
+									<li class="megurio-note-empty"><?php esc_html_e( 'No notes yet.', 'megurio-subscriptions-for-woocommerce' ); ?></li>
+								<?php else : ?>
+									<?php foreach ( $order_notes as $note ) : ?>
+										<li class="megurio-note-item">
+											<div class="megurio-note-header">
+												<span class="megurio-note-dot" aria-hidden="true"></span>
+												<strong class="megurio-note-time"><?php echo esc_html( $this->format_datetime_string( $note->date_created ) ); ?></strong>
+											</div>
+											<div class="megurio-note-body"><?php echo wp_kses_post( wpautop( $this->link_order_references_in_note( $this->format_admin_subscription_note( $note->content ) ) ) ); ?></div>
+										</li>
+									<?php endforeach; ?>
+								<?php endif; ?>
+							</ul>
+						</div>
 					</details>
 				</div>
 			<?php endif; ?>
@@ -1277,49 +1513,6 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				);
 			}
 			?>
-		<table class="shop_table shop_table_responsive">
-			<tbody>
-				<tr>
-					<th><?php esc_html_e( 'Subscription ID', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-					<td>#<?php echo esc_html( $subscription_id ); ?></td>
-				</tr>
-					<tr>
-						<th><?php esc_html_e( 'Product', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-						<td><?php echo esc_html( $product_id ? get_the_title( $product_id ) : '-' ); ?></td>
-					</tr>
-				</tbody>
-			</table>
-
-		<?php if ( in_array( $status, array( 'pending', 'active', 'on-hold' ), true ) ) : ?>
-			<h3 class="megurio-account-heading"><?php esc_html_e( 'Manage Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
-			<div class="megurio-subscription-actions">
-				<div class="megurio-subscription-actions__primary">
-					<?php if ( 'active' === $status && ! $this->has_unpaid_renewal_order( $subscription_id ) ) : ?>
-						<form method="post" action="" class="megurio-subscription-action-form">
-							<?php wp_nonce_field( 'megurio_front_pause_subscription' ); ?>
-							<input type="hidden" name="megurio_front_action" value="pause_subscription" />
-							<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
-							<button type="submit" class="button megurio-button-secondary"><?php esc_html_e( 'Pause This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
-						</form>
-					<?php elseif ( 'on-hold' === $status && $this->can_customer_resume_subscription( $subscription_id ) ) : ?>
-						<form method="post" action="" class="megurio-subscription-action-form">
-							<?php wp_nonce_field( 'megurio_front_resume_subscription' ); ?>
-							<input type="hidden" name="megurio_front_action" value="resume_subscription" />
-							<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
-							<button type="submit" class="button button-primary megurio-button-primary"><?php esc_html_e( 'Resume This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
-						</form>
-					<?php endif; ?>
-				</div>
-				<div class="megurio-subscription-actions__danger">
-					<form method="post" action="" class="megurio-cancel-subscription-form" data-confirm="<?php esc_attr_e( 'Cancelling this subscription is final and cannot be undone. Do you want to continue?', 'megurio-subscriptions-for-woocommerce' ); ?>">
-						<?php wp_nonce_field( 'megurio_front_cancel_subscription' ); ?>
-						<input type="hidden" name="megurio_front_action" value="cancel_subscription" />
-						<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
-						<button type="submit" class="button megurio-button-danger" aria-describedby="megurio-cancel-help-<?php echo esc_attr( $subscription_id ); ?>"><?php esc_html_e( 'Cancel This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
-						<span id="megurio-cancel-help-<?php echo esc_attr( $subscription_id ); ?>" class="megurio-subscription-actions__help"><?php esc_html_e( 'Cancellation is final and cannot be undone.', 'megurio-subscriptions-for-woocommerce' ); ?></span>
-					</form>
-				</div>
-			</div>
 
 			<?php
 			$sub_order        = wc_get_order( $subscription_id );
@@ -1353,7 +1546,6 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 					</form>
 				</details>
 			<?php endif; ?>
-		<?php endif; ?>
 
 		<h3 class="megurio-account-heading"><?php esc_html_e( 'Renewal Orders', 'megurio-subscriptions-for-woocommerce' ); ?></h3>
 		<?php if ( empty( $renewal_ids ) ) : ?>
@@ -1691,7 +1883,15 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return array
 	 */
 	public function limit_stripe_upe_to_card_for_subscription( $stripe_params ) {
-		if ( ! $this->is_subscription_checkout_context() || ! is_array( $stripe_params ) ) {
+		if ( ! is_array( $stripe_params ) ) {
+			return $stripe_params;
+		}
+
+		if ( isset( $stripe_params['excludedPaymentMethodTypes'] ) && is_array( $stripe_params['excludedPaymentMethodTypes'] ) ) {
+			$stripe_params['excludedPaymentMethodTypes'] = $this->sanitize_stripe_excluded_payment_method_types( $stripe_params['excludedPaymentMethodTypes'] );
+		}
+
+		if ( ! $this->is_subscription_checkout_context() ) {
 			return $stripe_params;
 		}
 
@@ -2414,6 +2614,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 			$subscription = wc_get_order( $subscription_id );
 			if ( $subscription instanceof WC_Order ) {
+				$subscription->set_status( self::STATUS_ACTIVE );
 				$subscription->set_payment_method( $order->get_payment_method() );
 				$subscription->set_payment_method_title( $order->get_payment_method_title() );
 				$subscription->save();
@@ -3760,7 +3961,32 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			}
 		);
 
-		return array_values( array_unique( $merged ) );
+		return $this->sanitize_stripe_excluded_payment_method_types( array_values( array_unique( $merged ) ) );
+	}
+
+	/**
+	 * Stripe.js elements() の excludedPaymentMethodTypes パラメータで許容される有効なタイプのみに絞り込みます。
+	 *
+	 * google_pay, apple_pay, link 等は Stripe.js の excludedPaymentMethodTypes でエラー (IntegrationError) となるため除外します。
+	 *
+	 * @param array $types 除外タイプ一覧。
+	 * @return array
+	 */
+	public function sanitize_stripe_excluded_payment_method_types( array $types ) {
+		$allowed_excluded_types = array(
+			'billie', 'bizum', 'kriya', 'mondu', 'ng_wallet', 'paypay', 'samsung_pay', 'satispay', 'sequra',
+			'scalapay', 'vipps', 'amazon_pay', 'alipay', 'alma', 'affirm', 'afterpay_clearpay', 'au_becs_debit',
+			'acss_debit', 'bacs_debit', 'bancontact', 'blik', 'boleto', 'card', 'cashapp', 'check_scan',
+			'capchase_pay', 'crypto', 'custom', 'customer_balance', 'eps', 'fpx', 'gcash', 'giropay', 'gopay',
+			'grabpay', 'ideal', 'klarna', 'konbini', 'mb_way', 'mobilepay', 'momo', 'multibanco', 'ng_bank',
+			'ng_bank_transfer', 'ng_card', 'ng_market', 'ng_ussd', 'nz_bank_account', 'oxxo', 'p24', 'pay_by_bank',
+			'paypal', 'payto', 'qris', 'rechnung', 'sepa_debit', 'sofort', 'south_korea_market', 'kr_card',
+			'kr_market', 'kakao_pay', 'naver_pay', 'payco', 'shopeepay', 'swish', 'truemoney', 'twint', 'wero',
+			'upi', 'us_bank_account', 'wechat_pay', 'paynow', 'pix', 'promptpay', 'revolut_pay', 'sunbit',
+			'netbanking', 'id_bank_transfer', 'demo_pay', 'shop_pay', 'zip',
+		);
+
+		return array_values( array_intersect( $types, $allowed_excluded_types ) );
 	}
 
 	/**
@@ -4035,65 +4261,78 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				$this->get_order_business_status_label( $last_renewal )
 			);
 		}
+		$payment_method_title = $this->get_subscription_payment_method_title( $subscription_id, $subscription );
 		?>
-		<div class="megurio-subscription-overview megurio-subscription-overview--<?php echo esc_attr( $status_class ); ?>">
-			<div class="megurio-subscription-overview__top">
-				<div class="megurio-subscription-overview__identity">
-					<div class="megurio-subscription-overview__icon" aria-hidden="true">&#8635;</div>
-					<div>
-						<h3><?php echo esc_html( $product_name ); ?></h3>
-						<div class="megurio-subscription-overview__price">
-							<?php echo wp_kses_post( $subscription->get_formatted_order_total() ); ?>
-							<span class="megurio-subscription-overview__interval"><?php echo esc_html( $this->format_interval_label( $interval_count, $interval_unit ) ); ?></span>
-						</div>
-					</div>
-				</div>
-				<div class="megurio-subscription-overview__status">
-					<span class="megurio-overview-pill">
-						<span aria-hidden="true"></span>
-						<?php echo esc_html( $status_label ); ?>
-					</span>
-					<p><?php echo esc_html( $status_summary ); ?></p>
-				</div>
-			</div>
+		<table class="shop_table subscription_details">
+			<tbody>
+				<tr>
+					<th><?php esc_html_e( 'Status', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+					<td><?php echo wp_kses_post( $this->render_status_badge( $status, $subscription_id ) ); ?></td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Start Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+					<td><?php echo esc_html( $this->format_timestamp( $start ) ); ?></td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+					<td><?php echo esc_html( $next_payment ? $this->format_timestamp( $next_payment ) : '-' ); ?></td>
+				</tr>
+				<?php if ( $payment_method_title ) : ?>
+					<tr>
+						<th><?php esc_html_e( 'Payment Method', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+						<td><?php echo esc_html( $payment_method_title ); ?></td>
+					</tr>
+				<?php endif; ?>
+				<?php if ( $last_renewal instanceof WC_Order ) : ?>
+					<tr>
+						<th><?php esc_html_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+						<td>
+							<a href="<?php echo esc_url( wc_get_endpoint_url( 'view-order', $last_renewal->get_id(), wc_get_page_permalink( 'myaccount' ) ) ); ?>">
+								<?php echo esc_html( $last_label ); ?>
+							</a>
+						</td>
+					</tr>
+				<?php endif; ?>
+			</tbody>
+		</table>
 
-			<div class="megurio-subscription-timeline" aria-label="<?php esc_attr_e( 'Subscription timeline', 'megurio-subscriptions-for-woocommerce' ); ?>">
-				<?php foreach ( $timeline_steps as $step ) : ?>
-					<div class="megurio-subscription-timeline__item megurio-subscription-timeline__item--<?php echo esc_attr( $step['state'] ); ?>">
-						<div class="megurio-subscription-timeline__label"><?php echo esc_html( $step['label'] ); ?></div>
-						<div class="megurio-subscription-timeline__bar"></div>
-						<div class="megurio-subscription-timeline__caption">
-							<?php if ( ! empty( $step['url'] ) ) : ?>
-								<a href="<?php echo esc_url( $step['url'] ); ?>"><?php echo esc_html( $step['caption'] ); ?></a>
-							<?php else : ?>
-								<?php echo esc_html( $step['caption'] ); ?>
-							<?php endif; ?>
-						</div>
-					</div>
-				<?php endforeach; ?>
-			</div>
-
-			<?php $this->render_account_payment_recovery_flow( $runtime_status ); ?>
-
-			<div class="megurio-subscription-overview__bottom">
-				<div>
-					<strong><?php esc_html_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-					<?php echo esc_html( $this->format_timestamp( $next_payment ) ); ?>
-				</div>
-				<div>
-					<strong><?php esc_html_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-					<?php if ( $last_renewal instanceof WC_Order ) : ?>
-						<a href="<?php echo esc_url( wc_get_endpoint_url( 'view-order', $last_renewal->get_id(), wc_get_page_permalink( 'myaccount' ) ) ); ?>"><?php echo esc_html( $last_label ); ?></a>
-					<?php else : ?>
-						<?php echo esc_html( $last_label ); ?>
+		<h2><?php esc_html_e( '定期購入商品', 'megurio-subscriptions-for-woocommerce' ); ?></h2>
+		<table class="shop_table order_details">
+			<thead>
+				<tr>
+					<th class="product-name"><?php esc_html_e( 'Product', 'woocommerce' ); ?></th>
+					<th class="product-total"><?php esc_html_e( 'Total', 'woocommerce' ); ?></th>
+					<?php if ( in_array( $status, array( 'pending', 'active', 'on-hold' ), true ) ) : ?>
+						<th class="product-actions" style="text-align:right"><?php esc_html_e( 'Action', 'megurio-subscriptions-for-woocommerce' ); ?></th>
 					<?php endif; ?>
-				</div>
-				<div>
-					<strong><?php esc_html_e( 'Start Date', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-					<?php echo esc_html( $this->format_timestamp( $start ) ); ?>
-				</div>
-			</div>
-		</div>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td class="product-name">
+						<?php if ( $product_id ) : ?>
+							<a href="<?php echo esc_url( get_permalink( $product_id ) ); ?>"><?php echo esc_html( $product_name ); ?></a>
+						<?php else : ?>
+							<?php echo esc_html( $product_name ); ?>
+						<?php endif; ?>
+					</td>
+					<td class="product-total">
+						<?php echo wp_kses_post( $subscription->get_formatted_order_total() ); ?>
+						<span class="megurio-subscription-interval">/ <?php echo esc_html( $this->format_interval_label( $interval_count, $interval_unit ) ); ?></span>
+					</td>
+					<?php if ( in_array( $status, array( 'pending', 'active', 'on-hold' ), true ) ) : ?>
+						<td class="product-actions" style="text-align:right">
+							<form method="post" action="" class="megurio-cancel-subscription-form" data-confirm="<?php esc_attr_e( 'Cancelling this subscription is final and cannot be undone. Do you want to continue?', 'megurio-subscriptions-for-woocommerce' ); ?>">
+								<?php wp_nonce_field( 'megurio_front_cancel_subscription' ); ?>
+								<input type="hidden" name="megurio_front_action" value="cancel_subscription" />
+								<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription_id ); ?>" />
+								<button type="submit" class="button megurio-button-danger"><?php esc_html_e( 'Cancel This Subscription', 'megurio-subscriptions-for-woocommerce' ); ?></button>
+							</form>
+						</td>
+					<?php endif; ?>
+				</tr>
+			</tbody>
+		</table>
 		<?php
 	}
 
@@ -4289,7 +4528,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 					<div class="megurio-subscription-overview__icon" aria-hidden="true">
 						<span class="dashicons dashicons-update-alt"></span>
 					</div>
-					<div>
+					<div class="megurio-subscription-overview__info">
 						<h3><?php echo esc_html( $product_name ); ?></h3>
 						<div class="megurio-subscription-overview__price">
 							<?php echo wp_kses_post( $subscription->get_formatted_order_total() ); ?>
@@ -4299,8 +4538,8 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				</div>
 				<div class="megurio-subscription-overview__status">
 					<span class="megurio-overview-pill">
-						<span aria-hidden="true"></span>
-						<?php echo esc_html( $status_label ); ?>
+						<span class="megurio-status-dot" aria-hidden="true"></span>
+						<span class="megurio-status-text"><?php echo esc_html( $status_label ); ?></span>
 					</span>
 					<p><?php echo esc_html( $status_summary ); ?></p>
 				</div>
@@ -4310,7 +4549,9 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 				<?php foreach ( $timeline_steps as $step ) : ?>
 					<div class="megurio-subscription-timeline__item megurio-subscription-timeline__item--<?php echo esc_attr( $step['state'] ); ?>">
 						<div class="megurio-subscription-timeline__label"><?php echo esc_html( $step['label'] ); ?></div>
-						<div class="megurio-subscription-timeline__bar"></div>
+						<div class="megurio-subscription-timeline__bar-track">
+							<div class="megurio-subscription-timeline__bar"></div>
+						</div>
 						<div class="megurio-subscription-timeline__caption">
 							<?php if ( ! empty( $step['url'] ) ) : ?>
 								<a href="<?php echo esc_url( $step['url'] ); ?>"><?php echo esc_html( $step['caption'] ); ?></a>
@@ -4325,21 +4566,32 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			<?php $this->render_admin_payment_recovery_flow( $runtime_status ); ?>
 
 			<div class="megurio-subscription-overview__bottom">
-				<div>
-					<strong><?php esc_html_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-					<?php echo esc_html( $this->format_timestamp( $next_payment ) ); ?>
+				<div class="megurio-overview-stat">
+					<div class="megurio-overview-stat__icon"><span class="dashicons dashicons-calendar-alt" aria-hidden="true"></span></div>
+					<div class="megurio-overview-stat__content">
+						<strong><?php esc_html_e( 'Next Billing Date', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+						<span><?php echo esc_html( $this->format_timestamp( $next_payment ) ); ?></span>
+					</div>
 				</div>
-				<div>
-					<strong><?php esc_html_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-					<?php if ( $last_renewal instanceof WC_Order ) : ?>
-						<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $last_renewal->get_id() . '&action=edit' ) ); ?>"><?php echo esc_html( $last_label ); ?></a>
-					<?php else : ?>
-						<?php echo esc_html( $last_label ); ?>
-					<?php endif; ?>
+				<div class="megurio-overview-stat">
+					<div class="megurio-overview-stat__icon"><span class="dashicons dashicons-clipboard" aria-hidden="true"></span></div>
+					<div class="megurio-overview-stat__content">
+						<strong><?php esc_html_e( 'Latest Renewal Order', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+						<span>
+							<?php if ( $last_renewal instanceof WC_Order ) : ?>
+								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $last_renewal->get_id() . '&action=edit' ) ); ?>"><?php echo esc_html( $last_label ); ?></a>
+							<?php else : ?>
+								<?php echo esc_html( $last_label ); ?>
+							<?php endif; ?>
+						</span>
+					</div>
 				</div>
-				<div>
-					<strong><?php esc_html_e( 'Start Date', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
-					<?php echo esc_html( $this->format_timestamp( $start ) ); ?>
+				<div class="megurio-overview-stat">
+					<div class="megurio-overview-stat__icon"><span class="dashicons dashicons-clock" aria-hidden="true"></span></div>
+					<div class="megurio-overview-stat__content">
+						<strong><?php esc_html_e( 'Start Date', 'megurio-subscriptions-for-woocommerce' ); ?></strong>
+						<span><?php echo esc_html( $this->format_timestamp( $start ) ); ?></span>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -4809,7 +5061,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 		}
 
 		return sprintf(
-			'<span class="megurio-business-status megurio-business-status--%1$s"><strong>%2$s</strong><small>%3$s</small></span>',
+			'<span class="megurio-business-status megurio-business-status--%1$s"><strong class="status-main">%2$s</strong> <small class="status-detail">%3$s</small></span>',
 			esc_attr( $status['key'] ),
 			esc_html( $status['label'] ),
 			esc_html( $status['detail'] )
@@ -4873,17 +5125,16 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 	 * @return string
 	 */
 	protected function render_status_badge( $status, $subscription_id = 0 ) {
-		$map = array(
-			'pending'   => 'status-pending',
-			'active'    => 'status-processing',
-			'on-hold'   => 'status-on-hold',
-			'cancelled' => 'status-cancelled',
-		);
-
-		$badge_class = isset( $map[ $status ] ) ? $map[ $status ] : 'status-pending';
 		$badge_label = $this->get_subscription_status_label( $status, $subscription_id );
+		$map = array(
+			'active'    => 'ok',
+			'on-hold'   => 'warn',
+			'cancelled' => 'danger',
+			'pending'   => 'info',
+		);
+		$status_class = isset( $map[ $status ] ) ? $map[ $status ] : 'neutral';
 
-		return '<mark class="order-status ' . esc_attr( $badge_class ) . '"><span>' . esc_html( $badge_label ) . '</span></mark>';
+		return '<span class="status ' . esc_attr( $status_class ) . ' megurio-status-badge ' . esc_attr( $status ) . '"><span>' . esc_html( $badge_label ) . '</span></span>';
 	}
 
 	/**
@@ -5088,13 +5339,10 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			return '-';
 		}
 
-		if ( 1 === $count ) {
-			/* translators: %s: time unit (day, week, month, year) */
-			return sprintf( __( 'Every %s', 'megurio-subscriptions-for-woocommerce' ), $unit_singular[ $unit ] );
-		}
+		$unit_label = 1 === $count ? $unit_singular[ $unit ] : $unit_plural[ $unit ];
 
 		/* translators: 1: count, 2: time unit (days, weeks, months, years) */
-		return sprintf( __( 'Every %1$d %2$s', 'megurio-subscriptions-for-woocommerce' ), $count, $unit_plural[ $unit ] );
+		return sprintf( __( 'Every %1$d %2$s', 'megurio-subscriptions-for-woocommerce' ), $count, $unit_label );
 	}
 
 	/**
@@ -5194,7 +5442,7 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 
 		$transitions = array(
 			self::STATUS_PENDING   => array( self::STATUS_ACTIVE, self::STATUS_CANCELLED ),
-			self::STATUS_ACTIVE    => array( self::STATUS_ON_HOLD, self::STATUS_CANCELLED ),
+			self::STATUS_ACTIVE    => array( self::STATUS_CANCELLED ),
 			self::STATUS_ON_HOLD   => array( self::STATUS_ACTIVE, self::STATUS_CANCELLED ),
 			self::STATUS_CANCELLED => array(),
 		);
@@ -5574,47 +5822,57 @@ if ( ! class_exists( 'Megurio_Subscriptions_For_Woocommerce' ) ) {
 			<?php wp_nonce_field( 'megurio_save_email_settings' ); ?>
 			<input type="hidden" name="megurio_action" value="save_email_settings">
 
-			<?php foreach ( $email_types as $type => $label ) :
-				$tpl = array(
-					'subject' => ! empty( $saved[ $type ]['subject'] ) ? $saved[ $type ]['subject'] : $defaults[ $type ]['subject'],
-					'heading' => ! empty( $saved[ $type ]['heading'] ) ? $saved[ $type ]['heading'] : $defaults[ $type ]['heading'],
-					'body'    => ! empty( $saved[ $type ]['body'] )    ? $saved[ $type ]['body']    : $defaults[ $type ]['body'],
-				);
-			?>
-			<h2><?php echo esc_html( $label ); ?></h2>
-			<p class="description"><?php esc_html_e( 'Available variables:', 'megurio-subscriptions-for-woocommerce' ); ?> <code><?php echo esc_html( $vars_help[ $type ] ); ?></code></p>
-			<table class="form-table">
-				<tr>
-					<th><?php esc_html_e( 'Subject', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-					<td><input type="text" name="megurio_email_<?php echo esc_attr( $type ); ?>_subject" value="<?php echo esc_attr( $tpl['subject'] ); ?>" class="large-text"></td>
-				</tr>
-				<tr>
-					<th><?php esc_html_e( 'Heading', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-					<td><input type="text" name="megurio_email_<?php echo esc_attr( $type ); ?>_heading" value="<?php echo esc_attr( $tpl['heading'] ); ?>" class="large-text"></td>
-				</tr>
-				<tr>
-					<th><?php esc_html_e( 'Body', 'megurio-subscriptions-for-woocommerce' ); ?></th>
-					<td>
-						<?php
-						wp_editor( $tpl['body'], 'megurio_email_' . $type, array(
-							'textarea_name' => 'megurio_email_' . $type . '_body',
-							'textarea_rows' => 12,
-							'media_buttons' => false,
-							'teeny'         => false,
-							'quicktags'     => true,
-						) );
-						?>
-						<p>
-							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=megurio-subscriptions&email_preview=' . $type ), 'megurio_email_preview' ) ); ?>" target="_blank" class="button"><?php esc_html_e( 'Preview (saved)', 'megurio-subscriptions-for-woocommerce' ); ?></a>
-							<span class="description"><?php esc_html_e( 'Opens the last saved template with sample data in a new window.', 'megurio-subscriptions-for-woocommerce' ); ?></span>
-						</p>
-					</td>
-				</tr>
-			</table>
-			<hr>
-			<?php endforeach; ?>
+			<div class="megurio-email-cards-grid">
+				<?php foreach ( $email_types as $type => $label ) :
+					$tpl = array(
+						'subject' => ! empty( $saved[ $type ]['subject'] ) ? $saved[ $type ]['subject'] : $defaults[ $type ]['subject'],
+						'heading' => ! empty( $saved[ $type ]['heading'] ) ? $saved[ $type ]['heading'] : $defaults[ $type ]['heading'],
+						'body'    => ! empty( $saved[ $type ]['body'] )    ? $saved[ $type ]['body']    : $defaults[ $type ]['body'],
+					);
+				?>
+				<div class="megurio-email-card">
+					<div class="megurio-email-card__header">
+						<h2><span class="dashicons dashicons-email-alt" aria-hidden="true"></span> <?php echo esc_html( $label ); ?></h2>
+						<p class="description megurio-variables-guide"><?php esc_html_e( 'Available variables:', 'megurio-subscriptions-for-woocommerce' ); ?> <code><?php echo esc_html( $vars_help[ $type ] ); ?></code></p>
+					</div>
+					<table class="form-table megurio-email-form-table">
+						<tr>
+							<th><?php esc_html_e( 'Subject', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<td><input type="text" name="megurio_email_<?php echo esc_attr( $type ); ?>_subject" value="<?php echo esc_attr( $tpl['subject'] ); ?>" class="large-text"></td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Heading', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<td><input type="text" name="megurio_email_<?php echo esc_attr( $type ); ?>_heading" value="<?php echo esc_attr( $tpl['heading'] ); ?>" class="large-text"></td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Body', 'megurio-subscriptions-for-woocommerce' ); ?></th>
+							<td>
+								<?php
+								wp_editor( $tpl['body'], 'megurio_email_' . $type, array(
+									'textarea_name' => 'megurio_email_' . $type . '_body',
+									'textarea_rows' => 12,
+									'media_buttons' => false,
+									'teeny'         => false,
+									'quicktags'     => true,
+								) );
+								?>
+								<div class="megurio-email-actions">
+									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=megurio-subscriptions&email_preview=' . $type ), 'megurio_email_preview' ) ); ?>" target="_blank" class="button button-secondary megurio-preview-btn">
+										<span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+										<?php esc_html_e( 'Preview (saved)', 'megurio-subscriptions-for-woocommerce' ); ?>
+									</a>
+									<span class="description"><?php esc_html_e( 'Opens the last saved template with sample data in a new window.', 'megurio-subscriptions-for-woocommerce' ); ?></span>
+								</div>
+							</td>
+						</tr>
+					</table>
+				</div>
+				<?php endforeach; ?>
+			</div>
 
-			<?php submit_button( __( 'Save Email Settings', 'megurio-subscriptions-for-woocommerce' ) ); ?>
+			<div class="megurio-email-submit-bar">
+				<?php submit_button( __( 'Save Email Settings', 'megurio-subscriptions-for-woocommerce' ), 'primary', 'submit', false ); ?>
+			</div>
 		</form>
 		<?php
 	}

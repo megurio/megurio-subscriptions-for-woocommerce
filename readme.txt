@@ -6,7 +6,7 @@ Tested up to: 7.0
 Requires PHP: 8.1
 WC requires at least: 8.2
 WC tested up to: 10.6.2
-Stable tag: 1.0.2
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -35,6 +35,13 @@ For the full changelog of all versions, please see the GitHub releases page.
 [GitHub releases page](https://github.com/megurio/megurio-subscriptions-for-woocommerce/releases)
 
 == Changelog ==
+
+= 1.1.0 =
+* Fixed Stripe.js Elements API compatibility issue where wallet payment types caused an IntegrationError and blank credit card form during checkout.
+* Redesigned My Account subscription details page with a minimalist, native WooCommerce table layout for seamless third-party theme compatibility.
+* Streamlined subscription status workflow and removed redundant pause functionality for a cleaner customer experience.
+* Enhanced admin subscription management interface with state-adaptive badges and indicators following NiceUI design standards.
+* Improved WooCommerce direct bank transfer (BACS) manual renewal and payment confirmation flows.
 
 = 1.0.2 =
 * Added manual subscription renewals with WooCommerce Direct Bank Transfer (BACS), including payment-confirmation handling.
